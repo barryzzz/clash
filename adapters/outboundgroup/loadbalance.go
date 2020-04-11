@@ -21,6 +21,11 @@ type LoadBalance struct {
 	providers []provider.ProxyProvider
 }
 
+type loadBalanceDialer struct {
+	*LoadBalance
+	parent C.ProxyDialer
+}
+
 func getKey(metadata *C.Metadata) string {
 	if metadata.Host != "" {
 		// ip host
@@ -52,29 +57,31 @@ func jumpHash(key uint64, buckets int32) int32 {
 	return int32(b)
 }
 
-func (lb *LoadBalance) DialContext(ctx context.Context, metadata *C.Metadata) (c C.Conn, err error) {
-	defer func() {
-		if err == nil {
-			c.AppendToChains(lb)
-		}
-	}()
-
-	proxy := lb.Unwrap(metadata)
-
-	c, err = proxy.DialContext(ctx, metadata)
-	return
+func (lb *LoadBalance) Dialer(parent C.ProxyDialer) C.ProxyDialer {
+	return &loadBalanceDialer{
+		LoadBalance: lb,
+		parent:      parent,
+	}
 }
 
-func (lb *LoadBalance) DialUDP(metadata *C.Metadata) (pc C.PacketConn, err error) {
+func (lb *loadBalanceDialer) DialContext(ctx context.Context, metadata *C.Metadata) (c C.Conn, connection C.Connection, err error) {
 	defer func() {
 		if err == nil {
-			pc.AppendToChains(lb)
+			connection.AppendToChains(lb)
 		}
 	}()
 
-	proxy := lb.Unwrap(metadata)
+	return lb.Unwrap(metadata).Dialer(lb.parent).DialContext(ctx, metadata)
+}
 
-	return proxy.DialUDP(metadata)
+func (lb *loadBalanceDialer) DialUDP(metadata *C.Metadata) (pc C.PacketConn, connection C.Connection, err error) {
+	defer func() {
+		if err == nil {
+			connection.AppendToChains(lb)
+		}
+	}()
+
+	return lb.Unwrap(metadata).Dialer(lb.parent).DialUDP(metadata)
 }
 
 func (lb *LoadBalance) SupportUDP() bool {

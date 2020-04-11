@@ -1,7 +1,6 @@
 package outboundgroup
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 
@@ -18,20 +17,8 @@ type Selector struct {
 	providers []provider.ProxyProvider
 }
 
-func (s *Selector) DialContext(ctx context.Context, metadata *C.Metadata) (C.Conn, error) {
-	c, err := s.selectedProxy().DialContext(ctx, metadata)
-	if err == nil {
-		c.AppendToChains(s)
-	}
-	return c, err
-}
-
-func (s *Selector) DialUDP(metadata *C.Metadata) (C.PacketConn, error) {
-	pc, err := s.selectedProxy().DialUDP(metadata)
-	if err == nil {
-		pc.AppendToChains(s)
-	}
-	return pc, err
+func (s *Selector) Dialer(parent C.ProxyDialer) C.ProxyDialer {
+	return newGroupDialer(s, s.selectedProxy().Dialer(parent))
 }
 
 func (s *Selector) SupportUDP() bool {
@@ -65,10 +52,6 @@ func (s *Selector) Set(name string) error {
 	}
 
 	return errors.New("Proxy does not exist")
-}
-
-func (s *Selector) Unwrap(metadata *C.Metadata) C.Proxy {
-	return s.selectedProxy()
 }
 
 func (s *Selector) selectedProxy() C.Proxy {
