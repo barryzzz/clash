@@ -18,7 +18,7 @@ func handleHTTP(request *adapters.HTTPAdapter, outbound net.Conn) {
 	req := request.R
 	host := req.Host
 
-	inboundReeder := bufio.NewReader(request)
+	inboundReeder := bufio.NewReader(request.Conn())
 	outboundReeder := bufio.NewReader(outbound)
 
 	for {
@@ -40,7 +40,7 @@ func handleHTTP(request *adapters.HTTPAdapter, outbound net.Conn) {
 		adapters.RemoveHopByHopHeaders(resp.Header)
 
 		if resp.StatusCode == http.StatusContinue {
-			err = resp.Write(request)
+			err = resp.Write(request.Conn())
 			if err != nil {
 				break
 			}
@@ -55,14 +55,14 @@ func handleHTTP(request *adapters.HTTPAdapter, outbound net.Conn) {
 		} else {
 			resp.Close = true
 		}
-		err = resp.Write(request)
+		err = resp.Write(request.Conn())
 		if err != nil || resp.Close {
 			break
 		}
 
 		// even if resp.Write write body to the connection, but some http request have to Copy to close it
 		buf := pool.BufPool.Get().([]byte)
-		_, err = io.CopyBuffer(request, resp.Body, buf)
+		_, err = io.CopyBuffer(request.Conn(), resp.Body, buf)
 		pool.BufPool.Put(buf[:cap(buf)])
 		if err != nil && err != io.EOF {
 			break
@@ -113,25 +113,20 @@ func handleUDPToLocal(packet C.UDPPacket, pc net.PacketConn, key string, fAddr n
 	}
 }
 
-func handleSocket(request *adapters.SocketAdapter, outbound net.Conn) {
-	relay(request, outbound)
+func handleSocket(request *adapters.SocketAdapter, outbound C.Conn) {
+	relay(request.Conn(), outbound)
 }
 
 // relay copies between left and right bidirectionally.
-func relay(leftConn, rightConn net.Conn) {
+func relay(leftConn net.Conn, rightConn C.Conn) {
 	ch := make(chan error)
 
 	go func() {
-		buf := pool.BufPool.Get().([]byte)
-		_, err := io.CopyBuffer(leftConn, rightConn, buf)
-		pool.BufPool.Put(buf[:cap(buf)])
-		leftConn.SetReadDeadline(time.Now())
+		_, err := rightConn.WriteTo(leftConn)
+		_ = leftConn.SetReadDeadline(time.Now())
 		ch <- err
 	}()
 
-	buf := pool.BufPool.Get().([]byte)
-	io.CopyBuffer(rightConn, leftConn, buf)
-	pool.BufPool.Put(buf[:cap(buf)])
-	rightConn.SetReadDeadline(time.Now())
+	_, _ = rightConn.ReadFrom(leftConn)
 	<-ch
 }

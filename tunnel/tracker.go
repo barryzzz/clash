@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"io"
 	"net"
 	"time"
 
@@ -33,19 +34,17 @@ func (tt *tcpTracker) ID() string {
 	return tt.UUID.String()
 }
 
-func (tt *tcpTracker) Read(b []byte) (int, error) {
-	n, err := tt.Conn.Read(b)
-	download := int64(n)
-	tt.manager.Download() <- download
-	tt.DownloadTotal += download
+func (tt *tcpTracker) WriteTo(w io.Writer) (int64, error) {
+	n, err := tt.Conn.WriteTo(w)
+	tt.manager.Upload() <- n
+	tt.UploadTotal += n
 	return n, err
 }
 
-func (tt *tcpTracker) Write(b []byte) (int, error) {
-	n, err := tt.Conn.Write(b)
-	upload := int64(n)
-	tt.manager.Upload() <- upload
-	tt.UploadTotal += upload
+func (tt *tcpTracker) ReadFrom(r io.Reader) (int64, error) {
+	n, err := tt.Conn.ReadFrom(r)
+	tt.manager.Upload() <- n
+	tt.UploadTotal += n
 	return n, err
 }
 

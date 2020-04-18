@@ -10,14 +10,24 @@ import (
 
 // HTTPAdapter is a adapter for HTTP connection
 type HTTPAdapter struct {
-	net.Conn
+	conn     net.Conn
 	metadata *C.Metadata
 	R        *http.Request
+}
+
+// Conn return net.Conn of connection
+func (h *HTTPAdapter) Conn() net.Conn {
+	return h.conn
 }
 
 // Metadata return destination metadata
 func (h *HTTPAdapter) Metadata() *C.Metadata {
 	return h.metadata
+}
+
+// Close close underlying resources
+func (h *HTTPAdapter) Close() {
+	_ = h.conn.Close()
 }
 
 // NewHTTP is HTTPAdapter generator
@@ -31,7 +41,7 @@ func NewHTTP(request *http.Request, conn net.Conn) *HTTPAdapter {
 	return &HTTPAdapter{
 		metadata: metadata,
 		R:        request,
-		Conn:     conn,
+		conn:     conn,
 	}
 }
 

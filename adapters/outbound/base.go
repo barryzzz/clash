@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Dreamacro/clash/common/pool"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -62,6 +64,24 @@ type conn struct {
 	chain C.Chain
 }
 
+func (c *conn) Close() error {
+	return c.Conn.Close()
+}
+
+func (c *conn) ReadFrom(r io.Reader) (n int64, err error) {
+	buf := pool.BufPool.Get().([]byte)
+	n, err = io.CopyBuffer(c.Conn, r, buf)
+	pool.BufPool.Put(buf[:cap(buf)])
+	return
+}
+
+func (c *conn) WriteTo(w io.Writer) (n int64, err error) {
+	buf := pool.BufPool.Get().([]byte)
+	n, err = io.CopyBuffer(w, c.Conn, buf)
+	pool.BufPool.Put(buf[:cap(buf)])
+	return
+}
+
 func (c *conn) Chains() C.Chain {
 	return c.chain
 }
@@ -71,7 +91,10 @@ func (c *conn) AppendToChains(a C.ProxyAdapter) {
 }
 
 func NewConn(c net.Conn, a C.ProxyAdapter) C.Conn {
-	return &conn{c, []string{a.Name()}}
+	return &conn{
+		Conn:  c,
+		chain: []string{a.Name()},
+	}
 }
 
 type PacketConn interface {

@@ -17,6 +17,6 @@ func NewHTTPS(request *http.Request, conn net.Conn) *SocketAdapter {
 	}
 	return &SocketAdapter{
 		metadata: metadata,
-		Conn:     conn,
+		conn:     conn,
 	}
 }
