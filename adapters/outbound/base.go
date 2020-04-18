@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Dreamacro/clash/common/pool"
+	"github.com/Dreamacro/clash/component/platform"
 	"io"
 	"net"
 	"net/http"
-	"runtime"
 	"time"
 
 	"github.com/Dreamacro/clash/common/queue"
@@ -17,7 +17,7 @@ import (
 
 var (
 	defaultURLTestTimeout = time.Second * 5
-	enabledZeroCopy       = runtime.GOOS == "linux" || runtime.GOOS == "android"
+	enabledZeroCopy       = platform.IsZeroCopySupported
 )
 
 type Base struct {
