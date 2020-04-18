@@ -20,17 +20,17 @@ type Tun struct {
 	adapter *tun2socket.Tun2Socket
 }
 
-type fakeConn struct {
+type udpPacket struct {
 	payload  []byte
 	endpoint *binding.Endpoint
 	sender   redirect.UDPSender
 }
 
-func (conn *fakeConn) Data() []byte {
+func (conn *udpPacket) Data() []byte {
 	return conn.payload
 }
 
-func (conn *fakeConn) WriteBack(b []byte, addr net.Addr) (n int, err error) {
+func (conn *udpPacket) WriteBack(b []byte, addr net.Addr) (n int, err error) {
 	if addr == nil {
 		addr = &net.UDPAddr{
 			IP:   conn.endpoint.Target.IP,
@@ -55,11 +55,13 @@ func (conn *fakeConn) WriteBack(b []byte, addr net.Addr) (n int, err error) {
 	return len(b), conn.sender(b, ep)
 }
 
-func (conn *fakeConn) Close() error {
-	return nil
+func (conn *udpPacket) Drop() {
+	if cap(conn.payload) == 20*1024 {
+		pool.BufPool.Put(conn.payload[:cap(conn.payload)])
+	}
 }
 
-func (conn *fakeConn) LocalAddr() net.Addr {
+func (conn *udpPacket) LocalAddr() net.Addr {
 	return &net.UDPAddr{
 		IP:   conn.endpoint.Source.IP,
 		Port: int(conn.endpoint.Source.Port),
@@ -119,7 +121,7 @@ func NewTunProxy(device string, gateway string, mirror string) (*Tun, error) {
 			Port: int(endpoint.Target.Port),
 			Zone: "",
 		})
-		conn := &fakeConn{
+		conn := &udpPacket{
 			payload:  payload,
 			endpoint: endpoint,
 			sender:   sender,
