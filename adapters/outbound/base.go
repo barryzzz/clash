@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/Dreamacro/clash/common/queue"
@@ -16,6 +17,7 @@ import (
 
 var (
 	defaultURLTestTimeout = time.Second * 5
+	enabledZeroCopy       = runtime.GOOS == "linux" || runtime.GOOS == "android"
 )
 
 type Base struct {
@@ -64,11 +66,23 @@ type conn struct {
 	chain C.Chain
 }
 
+type readOnlyReader struct {
+	io.Reader
+}
+
+type writeOnlyWriter struct {
+	io.Writer
+}
+
 func (c *conn) Close() error {
 	return c.Conn.Close()
 }
 
 func (c *conn) ReadFrom(r io.Reader) (n int64, err error) {
+	if _, ok := c.Conn.(*net.TCPConn); !ok || !enabledZeroCopy {
+		// Disable WriteTo for r to use buf from BufPool
+		r = &readOnlyReader{r}
+	}
 	buf := pool.BufPool.Get().([]byte)
 	n, err = io.CopyBuffer(c.Conn, r, buf)
 	pool.BufPool.Put(buf[:cap(buf)])
@@ -76,6 +90,10 @@ func (c *conn) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 func (c *conn) WriteTo(w io.Writer) (n int64, err error) {
+	if _, ok := c.Conn.(*net.TCPConn); !ok || !enabledZeroCopy {
+		// Disable ReadFrom for w to use buf from BufPool
+		w = &writeOnlyWriter{w}
+	}
 	buf := pool.BufPool.Get().([]byte)
 	n, err = io.CopyBuffer(w, c.Conn, buf)
 	pool.BufPool.Put(buf[:cap(buf)])
