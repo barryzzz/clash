@@ -56,9 +56,7 @@ func (conn *udpPacket) WriteBack(b []byte, addr net.Addr) (n int, err error) {
 }
 
 func (conn *udpPacket) Drop() {
-	if cap(conn.payload) == 20*1024 {
-		pool.BufPool.Put(conn.payload[:cap(conn.payload)])
-	}
+	_ = pool.Put(conn.payload)
 }
 
 func (conn *udpPacket) LocalAddr() net.Addr {
@@ -98,13 +96,13 @@ func NewTunProxy(device string, gateway string, mirror string) (*Tun, error) {
 	}
 
 	result.adapter.SetAllocator(func(length int) []byte {
-		buf := pool.BufPool.Get().([]byte)
-		if cap(buf) > length {
-			return buf[:length]
-		} else {
-			pool.BufPool.Put(buf)
-			return make([]byte, length)
+		buf := pool.Get(length)
+
+		if buf == nil {
+			buf = make([]byte, length)
 		}
+
+		return buf
 	})
 	result.adapter.SetTCPHandler(func(conn net.Conn, endpoint *binding.Endpoint) {
 		addr := socks5.ParseAddrToSocksAddr(&net.TCPAddr{
@@ -113,7 +111,7 @@ func NewTunProxy(device string, gateway string, mirror string) (*Tun, error) {
 			Zone: "",
 		})
 
-		tunnel.Add(adapters.NewSocket(addr, conn, C.SOCKS, C.TCP))
+		tunnel.Add(adapters.NewSocket(addr, conn, C.SOCKS))
 	})
 	result.adapter.SetUDPHandler(func(payload []byte, endpoint *binding.Endpoint, sender redirect.UDPSender) {
 		addr := socks5.ParseAddrToSocksAddr(&net.TCPAddr{
