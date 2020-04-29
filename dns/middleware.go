@@ -21,13 +21,11 @@ func withFakeIP(fakePool *fakeip.Pool) middleware {
 				msg := &D.Msg{}
 				msg.Answer = []D.RR{}
 
-				setMsgTTL(msg, 1)
 				msg.SetRcode(r, D.RcodeSuccess)
 				msg.Authoritative = true
 				msg.RecursionAvailable = true
 
 				w.WriteMsg(msg)
-
 				return
 			} else if q.Qtype != D.TypeA {
 				next(w, r)
@@ -53,7 +51,6 @@ func withFakeIP(fakePool *fakeip.Pool) middleware {
 			msg.RecursionAvailable = true
 
 			w.WriteMsg(msg)
-
 			return
 		}
 	}
