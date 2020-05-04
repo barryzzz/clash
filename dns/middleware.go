@@ -21,7 +21,6 @@ func withFakeIP(fakePool *fakeip.Pool) middleware {
 				msg := &D.Msg{}
 				msg.Answer = []D.RR{}
 
-				setMsgTTL(msg, 1)
 				msg.SetRcode(r, D.RcodeSuccess)
 				msg.Authoritative = true
 				msg.RecursionAvailable = true
