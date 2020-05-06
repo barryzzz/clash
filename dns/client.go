@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 	"fmt"
+	"github.com/Dreamacro/clash/component/resolver"
 	"net"
 	"strings"
 
@@ -29,8 +30,11 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err
 		ip = net.ParseIP(c.host)
 	} else {
 		var err error
-		if ip, err = c.r.ResolveIP(c.host); err != nil {
+		var resolved *resolver.ResolvedIP
+		if resolved, err = c.r.ResolveIP(c.host); err != nil {
 			return nil, fmt.Errorf("use default dns resolve failed: %w", err)
+		} else {
+			ip = resolved.SingleIP()
 		}
 	}
 

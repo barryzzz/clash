@@ -15,12 +15,14 @@ func (ds *DomainSuffix) RuleType() C.RuleType {
 	return C.DomainSuffix
 }
 
-func (ds *DomainSuffix) Match(metadata *C.Metadata) bool {
-	if metadata.AddrType != C.AtypDomainName {
-		return false
-	}
+func (ds *DomainSuffix) Match(metadata *C.Metadata) C.RuleMatchResult {
 	domain := metadata.Host
-	return strings.HasSuffix(domain, "."+ds.suffix) || domain == ds.suffix
+
+	if metadata.AddrType != C.AtypDomainName || !(strings.HasSuffix(domain, "."+ds.suffix) || domain == ds.suffix) {
+		return C.NotMatched
+	}
+
+	return C.DomainMatched
 }
 
 func (ds *DomainSuffix) Adapter() string {

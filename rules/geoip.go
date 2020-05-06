@@ -15,13 +15,27 @@ func (g *GEOIP) RuleType() C.RuleType {
 	return C.GEOIP
 }
 
-func (g *GEOIP) Match(metadata *C.Metadata) bool {
+func (g *GEOIP) Match(metadata *C.Metadata) C.RuleMatchResult {
 	ip := metadata.DstIP
 	if ip == nil {
-		return false
+		return C.NotMatched
 	}
-	record, _ := mmdb.Instance().Country(ip)
-	return record.Country.IsoCode == g.country
+
+	record4, _ := mmdb.Instance().Country(ip.V4)
+	record6, _ := mmdb.Instance().Country(ip.V6)
+
+	matched4 := record4.Country.IsoCode == g.country
+	matched6 := record6.Country.IsoCode == g.country
+
+	if matched4 && matched6 {
+		return C.IPMatched
+	} else if matched4 {
+		return C.IPv4Matched
+	} else if matched6 {
+		return C.IPv6Matched
+	} else {
+		return C.NotMatched
+	}
 }
 
 func (g *GEOIP) Adapter() string {

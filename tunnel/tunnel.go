@@ -136,7 +136,7 @@ func needLookupIP(metadata *C.Metadata) bool {
 func preHandleMetadata(metadata *C.Metadata) error {
 	// handle IP string on host
 	if ip := net.ParseIP(metadata.Host); ip != nil {
-		metadata.DstIP = ip
+		metadata.DstIP = resolver.ResolvedIPFromSingle(ip)
 	}
 
 	// preprocess enhanced-mode metadata
@@ -149,7 +149,7 @@ func preHandleMetadata(metadata *C.Metadata) error {
 				metadata.DstIP = nil
 			} else if node := resolver.DefaultHosts.Search(host); node != nil {
 				// redir-host should lookup the hosts
-				metadata.DstIP = node.Data.(net.IP)
+				metadata.DstIP = resolver.ResolvedIPFromSingle(node.Data.(net.IP))
 			}
 		} else if enhancedMode.IsFakeIP(metadata.DstIP) {
 			return fmt.Errorf("fake DNS record %s missing", metadata.DstIP)
@@ -310,7 +310,7 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 
 	if node := resolver.DefaultHosts.Search(metadata.Host); node != nil {
 		ip := node.Data.(net.IP)
-		metadata.DstIP = ip
+		metadata.DstIP = resolver.ResolvedIPFromSingle(ip)
 		resolved = true
 	}
 
@@ -323,24 +323,35 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 				}
 				log.Debugln("[DNS] resolve %s error: %s", metadata.Host, err.Error())
 			} else {
-				log.Debugln("[DNS] %s --> %s", metadata.Host, ip.String())
+				log.Debugln("[DNS] %s --> %s,%s", metadata.Host, ip.V4.String(), ip.V6.String())
 				metadata.DstIP = ip
 			}
 			resolved = true
 		}
 
-		if rule.Match(metadata) {
-			adapter, ok := proxies[rule.Adapter()]
-			if !ok {
-				continue
-			}
-
-			if metadata.NetWork == C.UDP && !adapter.SupportUDP() {
-				log.Debugln("%v UDP is not supported", adapter.Name())
-				continue
-			}
-			return adapter, rule, nil
+		result := rule.Match(metadata)
+		if result == C.NotMatched {
+			continue
 		}
+
+		adapter, ok := proxies[rule.Adapter()]
+		if !ok {
+			continue
+		}
+
+		if metadata.NetWork == C.UDP && !adapter.SupportUDP() {
+			log.Debugln("%v UDP is not supported", adapter.Name())
+			continue
+		}
+
+		switch result {
+		case C.IPv4Matched:
+			metadata.DstIP.V6 = nil
+		case C.IPv6Matched:
+			metadata.DstIP.V4 = nil
+		}
+
+		return adapter, rule, nil
 	}
 
 	return proxies["DIRECT"], nil, nil

@@ -21,24 +21,47 @@ var (
 	ErrIPVersion  = errors.New("ip version error")
 )
 
+type ResolvedIP struct {
+	V4 net.IP
+	V6 net.IP
+}
+
 type Resolver interface {
-	ResolveIP(host string) (ip net.IP, err error)
-	ResolveIPv4(host string) (ip net.IP, err error)
-	ResolveIPv6(host string) (ip net.IP, err error)
+	ResolveIP(host string) (ip *ResolvedIP, err error)
+	ResolveIPv4(host string) (ip *ResolvedIP, err error)
+	ResolveIPv6(host string) (ip *ResolvedIP, err error)
+}
+
+func (r *ResolvedIP) IPv6Available() bool {
+	return len(r.V6) == 16
+}
+
+func (r *ResolvedIP) IPv4Available() bool {
+	return len(r.V4) == 4
+}
+
+func (r *ResolvedIP) SingleIP() net.IP {
+	if r.IPv4Available() {
+		return r.V4
+	}
+	if r.IPv6Available() {
+		return r.V6
+	}
+	return nil
 }
 
 // ResolveIPv4 with a host, return ipv4
-func ResolveIPv4(host string) (net.IP, error) {
+func ResolveIPv4(host string) (*ResolvedIP, error) {
 	if node := DefaultHosts.Search(host); node != nil {
 		if ip := node.Data.(net.IP).To4(); ip != nil {
-			return ip, nil
+			return ResolvedIPFromSingle(ip), nil
 		}
 	}
 
 	ip := net.ParseIP(host)
 	if ip != nil {
 		if !strings.Contains(host, ":") {
-			return ip, nil
+			return ResolvedIPFromSingle(ip), nil
 		}
 		return nil, ErrIPVersion
 	}
@@ -54,7 +77,7 @@ func ResolveIPv4(host string) (net.IP, error) {
 
 	for _, ip := range ipAddrs {
 		if ip4 := ip.To4(); ip4 != nil {
-			return ip4, nil
+			return ResolvedIPFromSingle(ip4), nil
 		}
 	}
 
@@ -62,17 +85,17 @@ func ResolveIPv4(host string) (net.IP, error) {
 }
 
 // ResolveIPv6 with a host, return ipv6
-func ResolveIPv6(host string) (net.IP, error) {
+func ResolveIPv6(host string) (*ResolvedIP, error) {
 	if node := DefaultHosts.Search(host); node != nil {
 		if ip := node.Data.(net.IP).To16(); ip != nil {
-			return ip, nil
+			return ResolvedIPFromSingle(ip), nil
 		}
 	}
 
 	ip := net.ParseIP(host)
 	if ip != nil {
 		if strings.Contains(host, ":") {
-			return ip, nil
+			return ResolvedIPFromSingle(ip), nil
 		}
 		return nil, ErrIPVersion
 	}
@@ -88,7 +111,7 @@ func ResolveIPv6(host string) (net.IP, error) {
 
 	for _, ip := range ipAddrs {
 		if ip.To4() == nil {
-			return ip, nil
+			return ResolvedIPFromSingle(ip), nil
 		}
 	}
 
@@ -96,9 +119,11 @@ func ResolveIPv6(host string) (net.IP, error) {
 }
 
 // ResolveIP with a host, return ip
-func ResolveIP(host string) (net.IP, error) {
+func ResolveIP(host string) (*ResolvedIP, error) {
 	if node := DefaultHosts.Search(host); node != nil {
-		return node.Data.(net.IP), nil
+		ip := node.Data.(net.IP)
+
+		return ResolvedIPFromSingle(ip), nil
 	}
 
 	if DefaultResolver != nil {
@@ -107,13 +132,38 @@ func ResolveIP(host string) (net.IP, error) {
 
 	ip := net.ParseIP(host)
 	if ip != nil {
-		return ip, nil
+		return ResolvedIPFromSingle(ip), nil
 	}
 
-	ipAddr, err := net.ResolveIPAddr("ip", host)
+	ips, err := net.LookupIP(host)
 	if err != nil {
 		return nil, err
 	}
 
-	return ipAddr.IP, nil
+	return ResolvedIPFromList(ips)
+}
+
+func ResolvedIPFromSingle(ip net.IP) *ResolvedIP {
+	return &ResolvedIP{
+		V4: ip.To4(),
+		V6: ip.To16(),
+	}
+}
+
+func ResolvedIPFromList(ips []net.IP) (*ResolvedIP, error) {
+	resolved := &ResolvedIP{}
+
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil {
+			resolved.V4 = v4
+		} else {
+			resolved.V6 = ip.To16()
+		}
+	}
+
+	if len(resolved.V4) == 0 && len(resolved.V6) == 0 {
+		return nil, ErrIPNotFound
+	}
+
+	return resolved, nil
 }

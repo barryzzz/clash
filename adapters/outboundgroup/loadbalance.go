@@ -37,7 +37,7 @@ func getKey(metadata *C.Metadata) string {
 		return ""
 	}
 
-	return metadata.DstIP.String()
+	return metadata.DstIP.SingleIP().String()
 }
 
 func jumpHash(key uint64, buckets int32) int32 {

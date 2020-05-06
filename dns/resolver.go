@@ -46,37 +46,41 @@ type Resolver struct {
 }
 
 // ResolveIP request with TypeA and TypeAAAA, priority return TypeA
-func (r *Resolver) ResolveIP(host string) (ip net.IP, err error) {
-	ch := make(chan net.IP, 1)
+func (r *Resolver) ResolveIP(host string) (*resolver.ResolvedIP, error) {
+	resolved := &resolver.ResolvedIP{}
+
+	ch := make(chan error, 1)
 	go func() {
 		defer close(ch)
 		ip, err := r.resolveIP(host, D.TypeAAAA)
-		if err != nil {
-			return
+		if err == nil {
+			resolved.V6 = ip.V6
 		}
-		ch <- ip
+		ch <- err
 	}()
 
-	ip, err = r.resolveIP(host, D.TypeA)
-	if err == nil {
-		return
+	ip, err := r.resolveIP(host, D.TypeA)
+	if err != nil {
+		return nil, err
+	} else {
+		resolved.V4 = ip.V4
 	}
 
-	ip, open := <-ch
-	if !open {
-		return nil, resolver.ErrIPNotFound
+	err = <-ch
+	if err != nil {
+		return nil, err
 	}
 
-	return ip, nil
+	return resolved, nil
 }
 
 // ResolveIPv4 request with TypeA
-func (r *Resolver) ResolveIPv4(host string) (ip net.IP, err error) {
+func (r *Resolver) ResolveIPv4(host string) (ip *resolver.ResolvedIP, err error) {
 	return r.resolveIP(host, D.TypeA)
 }
 
 // ResolveIPv6 request with TypeAAAA
-func (r *Resolver) ResolveIPv6(host string) (ip net.IP, err error) {
+func (r *Resolver) ResolveIPv6(host string) (ip *resolver.ResolvedIP, err error) {
 	return r.resolveIP(host, D.TypeAAAA)
 }
 
@@ -136,16 +140,36 @@ func (r *Resolver) Exchange(m *D.Msg) (msg *D.Msg, err error) {
 }
 
 // IPToHost return fake-ip or redir-host mapping host
-func (r *Resolver) IPToHost(ip net.IP) (string, bool) {
+func (r *Resolver) IPToHost(ip *resolver.ResolvedIP) (string, bool) {
 	if r.fakeip {
-		return r.pool.LookBack(ip)
+		if ip.IPv4Available() {
+			cached4, exists := r.pool.LookBack(ip.V4)
+			if exists {
+				return cached4, true
+			}
+		}
+
+		if ip.IPv6Available() {
+			cached6, exists := r.pool.LookBack(ip.V6)
+			if exists {
+				return cached6, true
+			}
+		}
 	}
 
-	cache := r.cache.Get(ip.String())
-	if cache == nil {
+	var cached interface{}
+	if ip.IPv4Available() {
+		cached = r.cache.Get(ip.V4.String())
+	}
+	if cached == nil && ip.IPv6Available() {
+		cached = r.cache.Get(ip.V6.String())
+	}
+
+	if cached == nil {
 		return "", false
 	}
-	fqdn := cache.(*D.Msg).Question[0].Name
+
+	fqdn := cached.(*D.Msg).Question[0].Name
 	return strings.TrimRight(fqdn, "."), true
 }
 
@@ -159,9 +183,9 @@ func (r *Resolver) FakeIPEnabled() bool {
 }
 
 // IsFakeIP determine if given ip is a fake-ip
-func (r *Resolver) IsFakeIP(ip net.IP) bool {
+func (r *Resolver) IsFakeIP(ip *resolver.ResolvedIP) bool {
 	if r.FakeIPEnabled() {
-		return r.pool.Exist(ip)
+		return r.pool.Exist(ip.V4) || r.pool.Exist(ip.V6)
 	}
 	return false
 }
@@ -218,14 +242,14 @@ func (r *Resolver) fallbackExchange(m *D.Msg) (msg *D.Msg, err error) {
 	return
 }
 
-func (r *Resolver) resolveIP(host string, dnsType uint16) (ip net.IP, err error) {
-	ip = net.ParseIP(host)
+func (r *Resolver) resolveIP(host string, dnsType uint16) (*resolver.ResolvedIP, error) {
+	ip := net.ParseIP(host)
 	if ip != nil {
 		isIPv4 := ip.To4() != nil
 		if dnsType == D.TypeAAAA && !isIPv4 {
-			return ip, nil
+			return resolver.ResolvedIPFromSingle(ip), nil
 		} else if dnsType == D.TypeA && isIPv4 {
-			return ip, nil
+			return resolver.ResolvedIPFromSingle(ip), nil
 		} else {
 			return nil, resolver.ErrIPVersion
 		}
@@ -246,7 +270,8 @@ func (r *Resolver) resolveIP(host string, dnsType uint16) (ip net.IP, err error)
 	}
 
 	ip = ips[rand.Intn(ipLength)]
-	return
+
+	return resolver.ResolvedIPFromSingle(ip), nil
 }
 
 func (r *Resolver) msgToIP(msg *D.Msg) []net.IP {

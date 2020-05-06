@@ -19,11 +19,13 @@ func (p *Port) RuleType() C.RuleType {
 	return C.DstPort
 }
 
-func (p *Port) Match(metadata *C.Metadata) bool {
-	if p.isSource {
-		return metadata.SrcPort == p.port
+func (p *Port) Match(metadata *C.Metadata) C.RuleMatchResult {
+	if p.isSource && metadata.SrcPort == p.port {
+		return C.PortMatched
+	} else if metadata.DstPort == p.port {
+		return C.PortMatched
 	}
-	return metadata.DstPort == p.port
+	return C.NotMatched
 }
 
 func (p *Port) Adapter() string {

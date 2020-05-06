@@ -30,46 +30,39 @@ func ListenConfig() (*net.ListenConfig, error) {
 	return cfg, nil
 }
 
-func Dial(network, address string) (net.Conn, error) {
+func Dial(ctx context.Context, network, address string) (net.Conn, error) {
 	return DialContext(context.Background(), network, address)
 }
 
 func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+
+	dest, err := resolver.ResolveIP(host)
+	if err != nil {
+		return nil, err
+	}
+
+	return DialContextResolved(ctx, network, dest, port)
+}
+
+func DialContextResolved(ctx context.Context, network string, dest *resolver.ResolvedIP, port string) (net.Conn, error) {
+	destination := *dest
+
 	switch network {
-	case "tcp4", "tcp6", "udp4", "udp6":
-		host, port, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, err
-		}
-
-		dialer, err := Dialer()
-		if err != nil {
-			return nil, err
-		}
-
-		var ip net.IP
-		switch network {
-		case "tcp4", "udp4":
-			ip, err = resolver.ResolveIPv4(host)
-		default:
-			ip, err = resolver.ResolveIPv6(host)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		if DialHook != nil {
-			if err := DialHook(dialer, network, ip); err != nil {
-				return nil, err
-			}
-		}
-		return dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+	case "tcp4", "udp4":
+		destination.V6 = nil
+	case "tcp6", "udp6":
+		destination.V4 = nil
 	case "tcp", "udp":
-		return dualStackDailContext(ctx, network, address)
+		break
 	default:
 		return nil, errors.New("network invalid")
 	}
+
+	return dualStackDailContext(ctx, network, &destination, port)
 }
 
 func ListenPacket(network, address string) (net.PacketConn, error) {
@@ -88,26 +81,20 @@ func ListenPacket(network, address string) (net.PacketConn, error) {
 	return lc.ListenPacket(context.Background(), network, address)
 }
 
-func dualStackDailContext(ctx context.Context, network, address string) (net.Conn, error) {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		return nil, err
-	}
-
+func dualStackDailContext(ctx context.Context, network string, dest *resolver.ResolvedIP, port string) (net.Conn, error) {
 	returned := make(chan struct{})
 	defer close(returned)
 
 	type dialResult struct {
 		net.Conn
 		error
-		resolved bool
-		ipv6     bool
-		done     bool
+		ipv6 bool
+		done bool
 	}
 	results := make(chan dialResult)
 	var primary, fallback dialResult
 
-	startRacer := func(ctx context.Context, network, host string, ipv6 bool) {
+	startRacer := func(ctx context.Context, network string, ip net.IP, ipv6 bool) {
 		result := dialResult{ipv6: ipv6, done: true}
 		defer func() {
 			select {
@@ -125,17 +112,6 @@ func dualStackDailContext(ctx context.Context, network, address string) (net.Con
 			return
 		}
 
-		var ip net.IP
-		if ipv6 {
-			ip, result.error = resolver.ResolveIPv6(host)
-		} else {
-			ip, result.error = resolver.ResolveIPv4(host)
-		}
-		if result.error != nil {
-			return
-		}
-		result.resolved = true
-
 		if DialHook != nil {
 			if result.error = DialHook(dialer, network, ip); result.error != nil {
 				return
@@ -144,8 +120,12 @@ func dualStackDailContext(ctx context.Context, network, address string) (net.Con
 		result.Conn, result.error = dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
 	}
 
-	go startRacer(ctx, network+"4", host, false)
-	go startRacer(ctx, network+"6", host, true)
+	if dest.IPv4Available() {
+		go startRacer(ctx, network, dest.V4, false)
+	}
+	if dest.IPv6Available() {
+		go startRacer(ctx, network, dest.V6, true)
+	}
 
 	for {
 		select {
@@ -161,9 +141,9 @@ func dualStackDailContext(ctx context.Context, network, address string) (net.Con
 			}
 
 			if primary.done && fallback.done {
-				if primary.resolved {
+				if primary.done {
 					return nil, primary.error
-				} else if fallback.resolved {
+				} else if fallback.done {
 					return nil, fallback.error
 				} else {
 					return nil, primary.error

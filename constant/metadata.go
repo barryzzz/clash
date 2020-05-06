@@ -2,6 +2,7 @@ package constant
 
 import (
 	"encoding/json"
+	"github.com/Dreamacro/clash/component/resolver"
 	"net"
 	"strconv"
 )
@@ -57,14 +58,14 @@ func (t Type) MarshalJSON() ([]byte, error) {
 
 // Metadata is used to store connection address
 type Metadata struct {
-	NetWork  NetWork `json:"network"`
-	Type     Type    `json:"type"`
-	SrcIP    net.IP  `json:"sourceIP"`
-	DstIP    net.IP  `json:"destinationIP"`
-	SrcPort  string  `json:"sourcePort"`
-	DstPort  string  `json:"destinationPort"`
-	AddrType int     `json:"-"`
-	Host     string  `json:"host"`
+	NetWork  NetWork              `json:"network"`
+	Type     Type                 `json:"type"`
+	SrcIP    net.IP               `json:"sourceIP"`
+	DstIP    *resolver.ResolvedIP `json:"destinationIP"`
+	SrcPort  string               `json:"sourcePort"`
+	DstPort  string               `json:"destinationPort"`
+	AddrType int                  `json:"-"`
+	Host     string               `json:"host"`
 }
 
 func (m *Metadata) RemoteAddress() string {
@@ -85,7 +86,7 @@ func (m *Metadata) UDPAddr() *net.UDPAddr {
 	}
 	port, _ := strconv.Atoi(m.DstPort)
 	return &net.UDPAddr{
-		IP:   m.DstIP,
+		IP:   m.DstIP.SingleIP(),
 		Port: port,
 	}
 }
@@ -94,7 +95,7 @@ func (m *Metadata) String() string {
 	if m.Host != "" {
 		return m.Host
 	} else if m.DstIP != nil {
-		return m.DstIP.String()
+		return m.DstIP.SingleIP().String()
 	} else {
 		return "<nil>"
 	}

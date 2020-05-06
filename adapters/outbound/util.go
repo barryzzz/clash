@@ -77,10 +77,10 @@ func serializesSocksAddr(metadata *C.Metadata) []byte {
 		host := []byte(metadata.Host)
 		buf = [][]byte{{aType, len}, host, port}
 	case socks5.AtypIPv4:
-		host := metadata.DstIP.To4()
+		host := metadata.DstIP.V4
 		buf = [][]byte{{aType}, host, port}
 	case socks5.AtypIPv6:
-		host := metadata.DstIP.To16()
+		host := metadata.DstIP.V6
 		buf = [][]byte{{aType}, host, port}
 	}
 	return bytes.Join(buf, nil)
@@ -96,5 +96,5 @@ func resolveUDPAddr(network, address string) (*net.UDPAddr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return net.ResolveUDPAddr(network, net.JoinHostPort(ip.String(), port))
+	return net.ResolveUDPAddr(network, net.JoinHostPort(ip.SingleIP().String(), port))
 }

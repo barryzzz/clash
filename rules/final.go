@@ -12,8 +12,8 @@ func (f *Match) RuleType() C.RuleType {
 	return C.MATCH
 }
 
-func (f *Match) Match(metadata *C.Metadata) bool {
-	return true
+func (f *Match) Match(metadata *C.Metadata) C.RuleMatchResult {
+	return C.Matched
 }
 
 func (f *Match) Adapter() string {

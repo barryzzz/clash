@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"github.com/Dreamacro/clash/component/resolver"
 	"net"
 
 	C "github.com/Dreamacro/clash/constant"
@@ -34,12 +35,19 @@ func (i *IPCIDR) RuleType() C.RuleType {
 	return C.IPCIDR
 }
 
-func (i *IPCIDR) Match(metadata *C.Metadata) bool {
+func (i *IPCIDR) Match(metadata *C.Metadata) C.RuleMatchResult {
 	ip := metadata.DstIP
 	if i.isSourceIP {
-		ip = metadata.SrcIP
+		ip = resolver.ResolvedIPFromSingle(metadata.SrcIP)
 	}
-	return ip != nil && i.ipnet.Contains(ip)
+
+	if ip.IPv4Available() && i.ipnet.Contains(ip.V4) {
+		return C.IPv4Matched
+	} else if ip.IPv6Available() && i.ipnet.Contains(ip.V6) {
+		return C.IPv6Matched
+	} else {
+		return C.NotMatched
+	}
 }
 
 func (i *IPCIDR) Adapter() string {

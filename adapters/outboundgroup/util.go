@@ -2,6 +2,7 @@ package outboundgroup
 
 import (
 	"fmt"
+	"github.com/Dreamacro/clash/component/resolver"
 	"net"
 	"time"
 
@@ -21,7 +22,7 @@ func addrToMetadata(rawAddress string) (addr *C.Metadata, err error) {
 			addr = &C.Metadata{
 				AddrType: C.AtypIPv4,
 				Host:     "",
-				DstIP:    ip,
+				DstIP:    resolver.ResolvedIPFromSingle(ip),
 				DstPort:  port,
 			}
 			return
@@ -29,7 +30,7 @@ func addrToMetadata(rawAddress string) (addr *C.Metadata, err error) {
 			addr = &C.Metadata{
 				AddrType: C.AtypIPv6,
 				Host:     "",
-				DstIP:    ip,
+				DstIP:    resolver.ResolvedIPFromSingle(ip),
 				DstPort:  port,
 			}
 			return
