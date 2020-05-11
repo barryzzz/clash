@@ -20,7 +20,7 @@ import (
 	R "github.com/Dreamacro/clash/rules"
 	T "github.com/Dreamacro/clash/tunnel"
 
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // General config
@@ -36,6 +36,14 @@ type General struct {
 	ExternalController string       `json:"-"`
 	ExternalUI         string       `json:"-"`
 	Secret             string       `json:"-"`
+}
+
+// Tun config
+type Tun struct {
+	Enable    bool   `yaml:"enable"`
+	DeviceURL string `yaml:"device-url"`
+	Gateway   string `yaml:"gateway"`
+	Mirror    string `yaml:"mirror"`
 }
 
 // DNS config
@@ -66,6 +74,7 @@ type Experimental struct {
 // Config is clash config manager
 type Config struct {
 	General      *General
+	Tun          *Tun
 	DNS          *DNS
 	Experimental *Experimental
 	Hosts        *trie.Trie
@@ -108,6 +117,7 @@ type RawConfig struct {
 
 	ProxyProvider map[string]map[string]interface{} `yaml:"proxy-providers"`
 	Hosts         map[string]string                 `yaml:"hosts"`
+	Tun           Tun                               `yaml:"tun"`
 	DNS           RawDNS                            `yaml:"dns"`
 	Experimental  Experimental                      `yaml:"experimental"`
 	Proxy         []map[string]interface{}          `yaml:"proxies"`
@@ -175,6 +185,7 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 func ParseRawConfig(rawCfg *RawConfig) (*Config, error) {
 	config := &Config{}
 
+	config.Tun = &rawCfg.Tun
 	config.Experimental = &rawCfg.Experimental
 
 	general, err := parseGeneral(rawCfg)
