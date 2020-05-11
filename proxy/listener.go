@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+	"github.com/Dreamacro/clash/proxy/tun"
 	"net"
 	"strconv"
 
@@ -23,6 +24,7 @@ var (
 	redirUDPListener *redir.RedirUDPListener
 	mixedListener    *mixed.MixedListener
 	mixedUDPLister   *socks.SockUDPListener
+	tunAdapter       *tun.Tun
 )
 
 type listener interface {
@@ -258,4 +260,23 @@ func genAddr(host string, port int, allowLan bool) string {
 	}
 
 	return fmt.Sprintf("127.0.0.1:%d", port)
+}
+
+func ReCreateTun(device, gateway, mirror string) error {
+	if tunAdapter != nil {
+		tunAdapter.Close()
+		tunAdapter = nil
+	}
+
+	if len(device) == 0 {
+		return nil
+	}
+
+	var err error
+	tunAdapter, err = tun.NewTunProxy(device, gateway, mirror)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
