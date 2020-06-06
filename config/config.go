@@ -12,8 +12,8 @@ import (
 	"github.com/Dreamacro/clash/adapters/outboundgroup"
 	"github.com/Dreamacro/clash/adapters/provider"
 	"github.com/Dreamacro/clash/component/auth"
-	trie "github.com/Dreamacro/clash/component/domain-trie"
 	"github.com/Dreamacro/clash/component/fakeip"
+	"github.com/Dreamacro/clash/component/trie"
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/dns"
 	"github.com/Dreamacro/clash/log"
@@ -78,7 +78,7 @@ type Config struct {
 	Tun          *Tun
 	DNS          *DNS
 	Experimental *Experimental
-	Hosts        *trie.Trie
+	Hosts        *trie.DomainTrie
 	Rules        []C.Rule
 	Users        []auth.AuthUser
 	Proxies      map[string]C.Proxy
@@ -323,7 +323,7 @@ func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[
 
 		pd, err := provider.ParseProxyProvider(name, mapping)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
 		}
 
 		providersMap[name] = pd
@@ -332,7 +332,7 @@ func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[
 	for _, provider := range providersMap {
 		log.Infoln("Start initial provider %s", provider.Name())
 		if err := provider.Initial(); err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("initial proxy provider %s error: %w", provider.Name(), err)
 		}
 	}
 
@@ -415,42 +415,8 @@ func parseRules(cfg *RawConfig, proxies map[string]C.Proxy) ([]C.Rule, error) {
 
 		rule = trimArr(rule)
 		params = trimArr(params)
-		var (
-			parseErr error
-			parsed   C.Rule
-		)
 
-		switch rule[0] {
-		case "DOMAIN":
-			parsed = R.NewDomain(payload, target)
-		case "DOMAIN-SUFFIX":
-			parsed = R.NewDomainSuffix(payload, target)
-		case "DOMAIN-KEYWORD":
-			parsed = R.NewDomainKeyword(payload, target)
-		case "GEOIP":
-			noResolve := R.HasNoResolve(params)
-			parsed = R.NewGEOIP(payload, target, noResolve)
-		case "IP-CIDR", "IP-CIDR6":
-			noResolve := R.HasNoResolve(params)
-			parsed, parseErr = R.NewIPCIDR(payload, target, R.WithIPCIDRNoResolve(noResolve))
-		// deprecated when bump to 1.0
-		case "SOURCE-IP-CIDR":
-			fallthrough
-		case "SRC-IP-CIDR":
-			parsed, parseErr = R.NewIPCIDR(payload, target, R.WithIPCIDRSourceIP(true), R.WithIPCIDRNoResolve(true))
-		case "SRC-PORT":
-			parsed, parseErr = R.NewPort(payload, target, true)
-		case "DST-PORT":
-			parsed, parseErr = R.NewPort(payload, target, false)
-		case "MATCH":
-			fallthrough
-		// deprecated when bump to 1.0
-		case "FINAL":
-			parsed = R.NewMatch(target)
-		default:
-			parseErr = fmt.Errorf("unsupported rule type %s", rule[0])
-		}
-
+		parsed, parseErr := R.ParseRule(rule[0], payload, target, params)
 		if parseErr != nil {
 			return nil, fmt.Errorf("Rules[%d] [%s] error: %s", idx, line, parseErr.Error())
 		}
@@ -461,7 +427,7 @@ func parseRules(cfg *RawConfig, proxies map[string]C.Proxy) ([]C.Rule, error) {
 	return rules, nil
 }
 
-func parseHosts(cfg *RawConfig) (*trie.Trie, error) {
+func parseHosts(cfg *RawConfig) (*trie.DomainTrie, error) {
 	tree := trie.New()
 	if len(cfg.Hosts) != 0 {
 		for domain, ipStr := range cfg.Hosts {
@@ -597,7 +563,7 @@ func parseDNS(cfg RawDNS) (*DNS, error) {
 			return nil, err
 		}
 
-		var host *trie.Trie
+		var host *trie.DomainTrie
 		// fake ip skip host filter
 		if len(cfg.FakeIPFilter) != 0 {
 			host = trie.New()
