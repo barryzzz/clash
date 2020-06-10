@@ -25,9 +25,7 @@ var (
 	redirUDPListener *redir.RedirUDPListener
 	mixedListener    *mixed.MixedListener
 	mixedUDPLister   *socks.SockUDPListener
-<<<<<<< HEAD
 	tunAdapter       *tun.Tun
-=======
 
 	// lock for recreate function
 	socksMux sync.Mutex
@@ -35,7 +33,6 @@ var (
 	redirMux sync.Mutex
 	mixedMux sync.Mutex
 	tunMux   sync.Mutex
->>>>>>> origin/dev
 )
 
 type listener interface {
