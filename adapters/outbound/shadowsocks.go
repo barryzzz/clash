@@ -12,6 +12,7 @@ import (
 	"github.com/Dreamacro/clash/component/dialer"
 	obfs "github.com/Dreamacro/clash/component/simple-obfs"
 	"github.com/Dreamacro/clash/component/socks5"
+	"github.com/Dreamacro/clash/component/ssr"
 	v2rayObfs "github.com/Dreamacro/clash/component/v2ray-plugin"
 	C "github.com/Dreamacro/clash/constant"
 
@@ -21,11 +22,7 @@ import (
 type ShadowSocks struct {
 	*Base
 	cipher core.Cipher
-
-	// obfs
-	obfsMode    string
-	obfsOption  *simpleObfsOption
-	v2rayOption *v2rayObfs.Option
+	plugin interface{}
 }
 
 type ShadowSocksOption struct {
@@ -54,23 +51,50 @@ type v2rayObfsOption struct {
 	Mux            bool              `obfs:"mux,omitempty"`
 }
 
-func (ss *ShadowSocks) StreamConn(c net.Conn, metadata *C.Metadata) (net.Conn, error) {
-	switch ss.obfsMode {
-	case "tls":
-		c = obfs.NewTLSObfs(c, ss.obfsOption.Host)
-	case "http":
-		_, port, _ := net.SplitHostPort(ss.addr)
-		c = obfs.NewHTTPObfs(c, ss.obfsOption.Host, port)
-	case "websocket":
-		var err error
-		c, err = v2rayObfs.NewV2rayObfs(c, ss.v2rayOption)
+type ssrOption struct {
+	Protocol struct {
+		Mode    string `obfs:"mode"`
+		UserID  int    `obfs:"user-id"`
+		UserKey string `obfs:"user-key"`
+	} `obfs:"protocol"`
+}
+
+func (ss *ShadowSocks) StreamConn(c net.Conn, metadata *C.Metadata) (conn net.Conn, err error) {
+	defer func() {
 		if err != nil {
-			return nil, fmt.Errorf("%s connect error: %w", ss.addr, err)
+			return
 		}
+		if _, e := conn.Write(serializesSocksAddr(metadata)); e != nil {
+			conn = nil
+			err = e
+		}
+	}()
+
+	switch opts := ss.plugin.(type) {
+	case *simpleObfsOption:
+		if opts.Mode == "tls" {
+			return ss.cipher.StreamConn(obfs.NewTLSObfs(c, opts.Host)), nil
+		} else if opts.Mode == "http" {
+			_, port, _ := net.SplitHostPort(ss.addr)
+			return ss.cipher.StreamConn(obfs.NewHTTPObfs(c, opts.Host, port)), nil
+		}
+	case *v2rayObfs.Option:
+		if conn, err := v2rayObfs.NewV2rayObfs(c, opts); err != nil {
+			return nil, err
+		} else {
+			return ss.cipher.StreamConn(conn), nil
+		}
+	case *ssr.Plugin:
+		c = ss.cipher.StreamConn(c)
+
+		if opts.Protocol != nil {
+			return opts.Protocol.StreamConn(c)
+		}
+
+		return c, nil
 	}
-	c = ss.cipher.StreamConn(c)
-	_, err := c.Write(serializesSocksAddr(metadata))
-	return c, err
+
+	return ss.cipher.StreamConn(c), nil
 }
 
 func (ss *ShadowSocks) DialContext(ctx context.Context, metadata *C.Metadata) (C.Conn, error) {
@@ -114,9 +138,7 @@ func NewShadowSocks(option ShadowSocksOption) (*ShadowSocks, error) {
 		return nil, fmt.Errorf("ss %s initialize error: %w", addr, err)
 	}
 
-	var v2rayOption *v2rayObfs.Option
-	var obfsOption *simpleObfsOption
-	obfsMode := ""
+	var plugin interface{}
 
 	decoder := structure.NewDecoder(structure.Option{TagName: "obfs", WeaklyTypedInput: true})
 	if option.Plugin == "obfs" {
@@ -128,8 +150,8 @@ func NewShadowSocks(option ShadowSocksOption) (*ShadowSocks, error) {
 		if opts.Mode != "tls" && opts.Mode != "http" {
 			return nil, fmt.Errorf("ss %s obfs mode error: %s", addr, opts.Mode)
 		}
-		obfsMode = opts.Mode
-		obfsOption = &opts
+
+		plugin = &opts
 	} else if option.Plugin == "v2ray-plugin" {
 		opts := v2rayObfsOption{Host: "bing.com", Mux: true}
 		if err := decoder.Decode(option.PluginOpts, &opts); err != nil {
@@ -139,8 +161,8 @@ func NewShadowSocks(option ShadowSocksOption) (*ShadowSocks, error) {
 		if opts.Mode != "websocket" {
 			return nil, fmt.Errorf("ss %s obfs mode error: %s", addr, opts.Mode)
 		}
-		obfsMode = opts.Mode
-		v2rayOption = &v2rayObfs.Option{
+
+		v2rayOption := &v2rayObfs.Option{
 			Host:    opts.Host,
 			Path:    opts.Path,
 			Headers: opts.Headers,
@@ -152,6 +174,29 @@ func NewShadowSocks(option ShadowSocksOption) (*ShadowSocks, error) {
 			v2rayOption.SkipCertVerify = opts.SkipCertVerify
 			v2rayOption.SessionCache = getClientSessionCache()
 		}
+
+		plugin = v2rayOption
+	} else if option.Plugin == "ssr" {
+		opts := ssrOption{}
+		if err := decoder.Decode(option.PluginOpts, &opts); err != nil {
+			return nil, fmt.Errorf("ss %s ssr error: %w", addr, err)
+		}
+
+		ssrOption := &ssr.Option{
+			Cipher:   ciph,
+			Protocol: opts.Protocol.Mode,
+			Host:     option.Server,
+			Port:     option.Port,
+			UserID:   uint32(opts.Protocol.UserID),
+			UserKey:  opts.Protocol.UserKey,
+		}
+
+		ssrPlugin, err := ssr.New(ssrOption)
+		if err != nil {
+			return nil, fmt.Errorf("ss %s ssr plugin error: %w", addr, err)
+		}
+
+		plugin = ssrPlugin
 	}
 
 	return &ShadowSocks{
@@ -162,10 +207,7 @@ func NewShadowSocks(option ShadowSocksOption) (*ShadowSocks, error) {
 			udp:  option.UDP,
 		},
 		cipher: ciph,
-
-		obfsMode:    obfsMode,
-		v2rayOption: v2rayOption,
-		obfsOption:  obfsOption,
+		plugin: plugin,
 	}, nil
 }
 
