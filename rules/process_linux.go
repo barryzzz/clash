@@ -225,7 +225,7 @@ func unpackSocketDiagResponse(msg *syscall.NetlinkMessage) (inode, uid uint32) {
 	return
 }
 
-func resolveProcessNameByProcSearch(inode, _ int) (string, error) {
+func resolveProcessNameByProcSearch(inode, uid int) (string, error) {
 	files, err := ioutil.ReadDir(pathProc)
 	if err != nil {
 		return "", err
@@ -235,7 +235,11 @@ func resolveProcessNameByProcSearch(inode, _ int) (string, error) {
 	socket := []byte(fmt.Sprintf("socket:[%d]", inode))
 
 	for _, f := range files {
-		if !isPid(f.Name()) {
+		if !isPid(f.Name()) || !f.IsDir() {
+			continue
+		}
+
+		if f.Sys().(*syscall.Stat_t).Uid != uint32(uid) {
 			continue
 		}
 
