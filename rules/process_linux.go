@@ -34,8 +34,10 @@ type SocketResolver func(metadata *C.Metadata) (inode, uid int, err error)
 type ProcessNameResolver func(inode, uid int) (name string, err error)
 
 // export for android
-var DefaultSocketResolver SocketResolver = resolveSocketByNetlink
-var DefaultProcessNameResolver ProcessNameResolver = resolveProcessNameByProcSeach
+var (
+	DefaultSocketResolver      SocketResolver      = resolveSocketByNetlink
+	DefaultProcessNameResolver ProcessNameResolver = resolveProcessNameByProcSeach
+)
 
 type Process struct {
 	adapter string
