@@ -136,8 +136,8 @@ func resolveSocketByNetlink(metadata *C.Metadata) (int, int, error) {
 	defer syscall.Close(socket)
 
 	_ = syscall.SetNonblock(socket, true)
-	_ = syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_SNDTIMEO, &syscall.Timeval{Usec: 100})
-	_ = syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &syscall.Timeval{Usec: 100})
+	_ = syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_SNDTIMEO, &syscall.Timeval{Usec: 50})
+	_ = syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &syscall.Timeval{Usec: 50})
 
 	if err := syscall.Connect(socket, &syscall.SockaddrNetlink{
 		Family: syscall.AF_NETLINK,
