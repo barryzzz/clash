@@ -3,7 +3,6 @@ package rules
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,7 +21,22 @@ import (
 	"github.com/Dreamacro/clash/log"
 )
 
-var processCache = cache.New(time.Minute)
+// from https://github.com/vishvananda/netlink/blob/bca67dfc8220b44ef582c9da4e9172bf1c9ec973/nl/nl_linux.go#L52-L62
+func init() {
+	var x uint32 = 0x01020304
+	if *(*byte)(unsafe.Pointer(&x)) == 0x01 {
+		nativeEndian = binary.BigEndian
+	} else {
+		nativeEndian = binary.LittleEndian
+	}
+}
+
+type SocketResolver func(metadata *C.Metadata) (inode, uid int, err error)
+type ProcessNameResolver func(inode, uid int) (name string, err error)
+
+// export for android
+var DefaultSocketResolver SocketResolver = resolveSocketByNetlink
+var DefaultProcessNameResolver ProcessNameResolver = resolveProcessNameByProcSeach
 
 type Process struct {
 	adapter string
@@ -35,14 +49,14 @@ func (p *Process) RuleType() C.RuleType {
 
 func (p *Process) Match(metadata *C.Metadata) bool {
 	key := fmt.Sprintf("%s:%s:%s", metadata.NetWork.String(), metadata.SrcIP.String(), metadata.SrcPort)
-	cached := processCache.Get(key)
-	if cached == nil {
+	cached, hit := processCache.Get(key)
+	if !hit {
 		processName, err := resolveProcessName(metadata)
 		if err != nil {
 			log.Debugln("[%s] Resolve process of %s failure: %s", C.Process.String(), key, err.Error())
 		}
 
-		processCache.Put(key, processName, time.Second*2)
+		processCache.Set(key, processName)
 
 		cached = processName
 	}
@@ -69,30 +83,15 @@ func NewProcess(process string, adapter string) (*Process, error) {
 	}, nil
 }
 
-type SocketResolver func(metadata *C.Metadata) (inode, uid int, err error)
-type ProcessNameResolver func(inode, uid int) (name string, err error)
-
-// export for android
-var DefaultSocketResolver SocketResolver = resolveSocketByNetlink
-var DefaultProcessNameResolver ProcessNameResolver = resolveProcessNameByProcSeach
-
-var ErrInvalidNetwork = errors.New("invalid network")
-
-const sizeOfSocketDiagRequest = syscall.SizeofNlMsghdr + 8 + 48
-const socketDiagByFamily = 20
-const pathProc = "/proc"
+const (
+	sizeOfSocketDiagRequest = syscall.SizeofNlMsghdr + 8 + 48
+	socketDiagByFamily      = 20
+	pathProc                = "/proc"
+)
 
 var nativeEndian binary.ByteOrder = binary.LittleEndian
 
-// from https://github.com/vishvananda/netlink/blob/bca67dfc8220b44ef582c9da4e9172bf1c9ec973/nl/nl_linux.go#L52-L62
-func init() {
-	var x uint32 = 0x01020304
-	if *(*byte)(unsafe.Pointer(&x)) == 0x01 {
-		nativeEndian = binary.BigEndian
-	} else {
-		nativeEndian = binary.LittleEndian
-	}
-}
+var processCache = cache.NewLRUCache(cache.WithAge(2), cache.WithSize(64))
 
 func resolveProcessName(metadata *C.Metadata) (string, error) {
 	inode, uid, err := DefaultSocketResolver(metadata)
@@ -135,9 +134,9 @@ func resolveSocketByNetlink(metadata *C.Metadata) (int, int, error) {
 	}
 	defer syscall.Close(socket)
 
-	_ = syscall.SetNonblock(socket, true)
-	_ = syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_SNDTIMEO, &syscall.Timeval{Usec: 50})
-	_ = syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &syscall.Timeval{Usec: 50})
+	syscall.SetNonblock(socket, true)
+	syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_SNDTIMEO, &syscall.Timeval{Usec: 50})
+	syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &syscall.Timeval{Usec: 50})
 
 	if err := syscall.Connect(socket, &syscall.SockaddrNetlink{
 		Family: syscall.AF_NETLINK,
