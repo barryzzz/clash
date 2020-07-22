@@ -1,24 +1,25 @@
 package rules
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/Dreamacro/clash/common/cache"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/log"
+	"io"
 	"io/ioutil"
 	"net"
-	"os"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
+
+	"github.com/Dreamacro/clash/common/cache"
+	"github.com/Dreamacro/clash/common/pool"
+	C "github.com/Dreamacro/clash/constant"
+	"github.com/Dreamacro/clash/log"
 )
 
 var processCache = cache.New(time.Minute)
@@ -36,14 +37,12 @@ func (p *Process) Match(metadata *C.Metadata) bool {
 	key := fmt.Sprintf("%s:%s:%s", metadata.NetWork.String(), metadata.SrcIP.String(), metadata.SrcPort)
 	cached := processCache.Get(key)
 	if cached == nil {
-		port, _ := strconv.Atoi(metadata.SrcPort)
-
-		processName, err := queryProcessNameByAddr(metadata.NetWork, metadata.SrcIP, port)
+		processName, err := resolveProcessName(metadata)
 		if err != nil {
 			log.Debugln("[%s] Resolve process of %s failure: %s", C.Process.String(), key, err.Error())
 		}
 
-		processCache.Put(key, processName, time.Second*1)
+		processCache.Put(key, processName, time.Second*2)
 
 		cached = processName
 	}
@@ -70,105 +69,163 @@ func NewProcess(process string, adapter string) (*Process, error) {
 	}, nil
 }
 
-const pathTcp = "/proc/net/tcp"
-const pathUdp = "/proc/net/udp"
-const pathTcp6 = "/proc/net/tcp6"
-const pathUdp6 = "/proc/net/udp6"
+type SocketResolver func(metadata *C.Metadata) (inode, uid int, err error)
+type ProcessNameResolver func(inode, uid int) (name string, err error)
+
+// export for android
+var DefaultSocketResolver SocketResolver = resolveSocketByNetlink
+var DefaultProcessNameResolver ProcessNameResolver = resolveProcessNameByProcSeach
+
+var ErrInvalidNetwork = errors.New("invalid network")
+
+const sizeOfSocketDiagRequest = syscall.SizeofNlMsghdr + 8 + 48
+const socketDiagByFamily = 20
 const pathProc = "/proc"
-const indexOfLocalAddr = 1
-const indexOfInode = 9
-const indexOfUid = 7
 
-var ErrInvalidIP = errors.New("invalid ip")
+var nativeEndian binary.ByteOrder = binary.LittleEndian
 
-func queryProcessNameByAddr(network C.NetWork, sourceAddress net.IP, sourcePort int) (string, error) {
-	println(time.Now().Nanosecond())
-	defer println(time.Now().Nanosecond())
-
-	inode, _, err := queryInodeUidByAddr(network, sourceAddress.To4(), sourcePort)
-	if err != nil {
-		inode, _, err = queryInodeUidByAddr(network, sourceAddress.To16(), sourcePort)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	return queryCmdlineByInode(inode)
-}
-
-func queryInodeUidByAddr(network C.NetWork, sourceAddress net.IP, sourcePort int) (int, int, error) {
-	if sourceAddress == nil {
-		return 0, 0, ErrInvalidIP
-	}
-
-	var port [2]byte
-
-	var path string
-	var address []byte
-
-	if len(sourceAddress) == 16 {
-		if network == C.TCP {
-			path = pathTcp6
-		} else {
-			path = pathUdp6
-		}
-
-		address = []byte{
-			sourceAddress[15], sourceAddress[14], sourceAddress[13], sourceAddress[12],
-			sourceAddress[11], sourceAddress[10], sourceAddress[9], sourceAddress[8],
-			sourceAddress[7], sourceAddress[6], sourceAddress[5], sourceAddress[4],
-			sourceAddress[3], sourceAddress[2], sourceAddress[1], sourceAddress[0]}
+// from https://github.com/vishvananda/netlink/blob/bca67dfc8220b44ef582c9da4e9172bf1c9ec973/nl/nl_linux.go#L52-L62
+func init() {
+	var x uint32 = 0x01020304
+	if *(*byte)(unsafe.Pointer(&x)) == 0x01 {
+		nativeEndian = binary.BigEndian
 	} else {
-		if network == C.TCP {
-			path = pathTcp
-		} else {
-			path = pathUdp
-		}
-
-		address = []byte{sourceAddress[3], sourceAddress[2], sourceAddress[1], sourceAddress[0]}
+		nativeEndian = binary.LittleEndian
 	}
-
-	binary.BigEndian.PutUint16(port[:], uint16(sourcePort))
-
-	return queryInodeUid(path, address, port[:])
 }
 
-func queryInodeUid(path string, ip []byte, port []byte) (int, int, error) {
-	file, err := os.Open(path)
+func resolveProcessName(metadata *C.Metadata) (string, error) {
+	inode, uid, err := DefaultSocketResolver(metadata)
 	if err != nil {
-		return -1, -1, err
+		return "", err
 	}
-	defer file.Close()
 
-	reader := bufio.NewReader(file)
-
-	local := fmt.Sprintf("%s:%s", hex.EncodeToString(ip), hex.EncodeToString(port[:]))
-
-	for {
-		row, _, err := reader.ReadLine()
-		if err != nil {
-			return -1, -1, err
-		}
-
-		items := strings.Fields(string(row))
-
-		if strings.EqualFold(local, items[indexOfLocalAddr]) {
-			inode, err := strconv.Atoi(items[indexOfInode])
-			if err != nil {
-				return -1, -1, err
-			}
-
-			uid, err := strconv.Atoi(items[indexOfUid])
-			if err != nil {
-				return -1, -1, err
-			}
-
-			return inode, uid, nil
-		}
-	}
+	return DefaultProcessNameResolver(inode, uid)
 }
 
-func queryCmdlineByInode(inode int) (string, error) {
+func resolveSocketByNetlink(metadata *C.Metadata) (int, int, error) {
+	var family byte
+	var protocol byte
+
+	switch metadata.NetWork {
+	case C.TCP:
+		protocol = syscall.IPPROTO_TCP
+	case C.UDP:
+		protocol = syscall.IPPROTO_UDP
+	default:
+		return 0, 0, ErrInvalidNetwork
+	}
+
+	if metadata.SrcIP.To4() != nil {
+		family = syscall.AF_INET
+	} else {
+		family = syscall.AF_INET6
+	}
+
+	srcPort, err := strconv.Atoi(metadata.SrcPort)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	req := packSocketDiagRequest(family, protocol, metadata.SrcIP, uint16(srcPort))
+
+	socket, err := syscall.Socket(syscall.AF_NETLINK, syscall.SOCK_DGRAM, syscall.NETLINK_INET_DIAG)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer syscall.Close(socket)
+
+	_ = syscall.SetNonblock(socket, true)
+	_ = syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_SNDTIMEO, &syscall.Timeval{Usec: 100})
+	_ = syscall.SetsockoptTimeval(socket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &syscall.Timeval{Usec: 100})
+
+	if err := syscall.Connect(socket, &syscall.SockaddrNetlink{
+		Family: syscall.AF_NETLINK,
+		Pad:    0,
+		Pid:    0,
+		Groups: 0,
+	}); err != nil {
+		return 0, 0, err
+	}
+
+	if _, err := syscall.Write(socket, req); err != nil {
+		return 0, 0, err
+	}
+
+	rb := pool.Get(pool.RelayBufferSize)
+	defer pool.Put(rb)
+
+	n, err := syscall.Read(socket, rb)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	messages, err := syscall.ParseNetlinkMessage(rb[:n])
+	if err != nil {
+		return 0, 0, err
+	} else if len(messages) == 0 {
+		return 0, 0, io.ErrUnexpectedEOF
+	}
+
+	message := messages[0]
+	if message.Header.Type&syscall.NLMSG_ERROR != 0 {
+		return 0, 0, syscall.ESRCH
+	}
+
+	uid, inode := unpackSocketDiagResponse(&messages[0])
+
+	return int(uid), int(inode), nil
+}
+
+func packSocketDiagRequest(family, protocol byte, source net.IP, sourcePort uint16) []byte {
+	s := make([]byte, 16)
+
+	if v4 := source.To4(); v4 != nil {
+		copy(s, v4)
+	} else {
+		copy(s, source)
+	}
+
+	buf := make([]byte, sizeOfSocketDiagRequest)
+
+	nativeEndian.PutUint32(buf[0:4], sizeOfSocketDiagRequest)
+	nativeEndian.PutUint16(buf[4:6], socketDiagByFamily)
+	nativeEndian.PutUint16(buf[6:8], syscall.NLM_F_REQUEST|syscall.NLM_F_DUMP)
+	nativeEndian.PutUint32(buf[8:12], 0)
+	nativeEndian.PutUint32(buf[12:16], 0)
+
+	buf[16] = family
+	buf[17] = protocol
+	buf[18] = 0
+	buf[19] = 0
+	nativeEndian.PutUint32(buf[20:24], 0xFFFFFFFF)
+
+	binary.BigEndian.PutUint16(buf[24:26], sourcePort)
+	binary.BigEndian.PutUint16(buf[26:28], 0)
+
+	copy(buf[28:44], s)
+	copy(buf[44:60], net.IPv6zero)
+
+	nativeEndian.PutUint32(buf[60:64], 0)
+	nativeEndian.PutUint64(buf[64:72], 0xFFFFFFFFFFFFFFFF)
+
+	return buf
+}
+
+func unpackSocketDiagResponse(msg *syscall.NetlinkMessage) (inode, uid uint32) {
+	if len(msg.Data) < 72 {
+		return 0, 0
+	}
+
+	data := msg.Data
+
+	uid = nativeEndian.Uint32(data[64:68])
+	inode = nativeEndian.Uint32(data[68:72])
+
+	return
+}
+
+func resolveProcessNameByProcSeach(inode, _ int) (string, error) {
 	files, err := ioutil.ReadDir(pathProc)
 	if err != nil {
 		return "", err
@@ -178,6 +235,10 @@ func queryCmdlineByInode(inode int) (string, error) {
 	socket := []byte(fmt.Sprintf("socket:[%d]", inode))
 
 	for _, f := range files {
+		if !isPid(f.Name()) {
+			continue
+		}
+
 		processPath := path.Join(pathProc, f.Name())
 		fdPath := path.Join(processPath, "fd")
 
@@ -203,7 +264,7 @@ func queryCmdlineByInode(inode int) (string, error) {
 		}
 	}
 
-	return "", syscall.EEXIST
+	return "", syscall.ESRCH
 }
 
 func splitCmdline(cmdline []byte) string {
@@ -217,4 +278,14 @@ func splitCmdline(cmdline []byte) string {
 	}
 
 	return filepath.Base(string(cmdline[:indexOfEndOfString]))
+}
+
+func isPid(s string) bool {
+	for _, s := range s {
+		if s < '0' || s > '9' {
+			return false
+		}
+	}
+
+	return true
 }
