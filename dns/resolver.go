@@ -134,6 +134,37 @@ func (r *Resolver) exchangeWithoutCache(m *D.Msg) (msg *D.Msg, err error) {
 
 		isIPReq := isIPRequest(q)
 		if isIPReq {
+			if hosts := resolver.DefaultHosts; hosts != nil {
+				if node := hosts.Search(strings.TrimRight(q.Name, ".")); node != nil {
+					var ip net.IP
+
+					switch q.Qtype {
+					case D.TypeA:
+						if ip4 := node.Data.(net.IP).To4(); ip4 != nil {
+							ip = ip4
+						}
+					case D.TypeAAAA:
+						if ip6 := node.Data.(net.IP).To16(); ip6 != nil {
+							ip = ip6
+						}
+					}
+
+					if ip != nil {
+						rr := &D.A{}
+						rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: q.Qtype, Class: q.Qclass, Ttl: dnsDefaultTTL}
+						rr.A = ip
+						msg := m.Copy()
+						msg.Answer = []D.RR{rr}
+
+						msg.SetRcode(m, D.RcodeSuccess)
+						msg.Authoritative = true
+						msg.RecursionAvailable = true
+
+						return msg, nil
+					}
+				}
+			}
+
 			return r.fallbackExchange(m)
 		}
 
