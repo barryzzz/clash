@@ -128,25 +128,22 @@ func handleUDPToLocal(packet C.UDPPacket, pc net.PacketConn, key string, fAddr n
 	}
 }
 
-func handleSocket(request *adapters.SocketAdapter, outbound net.Conn) {
-	relay(request, outbound)
-}
-
-// relay copies between left and right bidirectionally.
-func relay(leftConn, rightConn net.Conn) {
+func handleSocket(request *adapters.SocketAdapter, outbound C.Conn) {
 	ch := make(chan error)
 
+	var inbound net.Conn = request
+	if r := request.Raw(); r != nil {
+		inbound = r
+	}
+
 	go func() {
-		buf := pool.Get(pool.RelayBufferSize)
-		_, err := io.CopyBuffer(leftConn, rightConn, buf)
-		pool.Put(buf)
-		leftConn.SetReadDeadline(time.Now())
+		_, err := outbound.WriteTo(inbound)
+		inbound.SetReadDeadline(time.Now())
 		ch <- err
 	}()
 
-	buf := pool.Get(pool.RelayBufferSize)
-	io.CopyBuffer(rightConn, leftConn, buf)
-	pool.Put(buf)
-	rightConn.SetReadDeadline(time.Now())
+	outbound.ReadFrom(inbound)
+	inbound.SetReadDeadline(time.Now())
+
 	<-ch
 }

@@ -18,6 +18,11 @@ func (s *SocketAdapter) Metadata() *C.Metadata {
 	return s.metadata
 }
 
+// Raw return underlying tcp connection
+func (s *SocketAdapter) Raw() net.Conn {
+	return s.Conn
+}
+
 // NewSocket is SocketAdapter generator
 func NewSocket(target socks5.Addr, conn net.Conn, source C.Type) *SocketAdapter {
 	metadata := parseSocksAddr(target)

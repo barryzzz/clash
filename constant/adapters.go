@@ -3,6 +3,7 @@ package constant
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"time"
 )
@@ -30,6 +31,7 @@ const (
 type ServerAdapter interface {
 	net.Conn
 	Metadata() *Metadata
+	Raw() net.Conn // for zero-copy support
 }
 
 type Connection interface {
@@ -53,6 +55,8 @@ func (c Chain) String() string {
 type Conn interface {
 	net.Conn
 	Connection
+	io.ReaderFrom
+	io.WriterTo
 }
 
 type PacketConn interface {

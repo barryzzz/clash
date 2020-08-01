@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Dreamacro/clash/common/pool"
+	"io"
 	"net"
 	"net/http"
 	"sync/atomic"
@@ -73,6 +75,36 @@ func (c *conn) Chains() C.Chain {
 
 func (c *conn) AppendToChains(a C.ProxyAdapter) {
 	c.chain = append(c.chain, a.Name())
+}
+
+func (c *conn) ReadFrom(r io.Reader) (int64, error) {
+	if f, ok := c.Conn.(io.ReaderFrom); ok {
+		return f.ReadFrom(r)
+	}
+
+	// fallback to copy
+
+	// disable r.WriteTo
+	r = struct{ io.Reader }{r}
+	buf := pool.Get(pool.RelayBufferSize)
+	defer pool.Put(buf)
+
+	return io.CopyBuffer(c.Conn, r, buf)
+}
+
+func (c *conn) WriteTo(w io.Writer) (int64, error) {
+	if t, ok := c.Conn.(io.WriterTo); ok {
+		return t.WriteTo(w)
+	}
+
+	// fallback to copy
+
+	// disable w.ReadFrom
+	w = struct{ io.Writer }{w}
+	buf := pool.Get(pool.RelayBufferSize)
+	defer pool.Put(buf)
+
+	return io.CopyBuffer(w, c.Conn, buf)
 }
 
 func NewConn(c net.Conn, a C.ProxyAdapter) C.Conn {

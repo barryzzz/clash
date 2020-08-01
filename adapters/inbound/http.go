@@ -20,6 +20,11 @@ func (h *HTTPAdapter) Metadata() *C.Metadata {
 	return h.metadata
 }
 
+// Raw return underlying tcp connection
+func (h *HTTPAdapter) Raw() net.Conn {
+	return nil // unsupported
+}
+
 // NewHTTP is HTTPAdapter generator
 func NewHTTP(request *http.Request, conn net.Conn) *HTTPAdapter {
 	metadata := parseHTTPAddr(request)
