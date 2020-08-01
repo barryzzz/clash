@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/Dreamacro/clash/common/pool"
 	"io"
 	"net"
 	"net/http"
 	"sync/atomic"
 	"time"
 
+	"github.com/Dreamacro/clash/common/pool"
 	"github.com/Dreamacro/clash/common/queue"
+	"github.com/Dreamacro/clash/component/feature"
 	C "github.com/Dreamacro/clash/constant"
 )
 
@@ -78,33 +79,45 @@ func (c *conn) AppendToChains(a C.ProxyAdapter) {
 }
 
 func (c *conn) ReadFrom(r io.Reader) (int64, error) {
-	if f, ok := c.Conn.(io.ReaderFrom); ok {
-		return f.ReadFrom(r)
+	if from, ok := c.Conn.(io.ReaderFrom); ok {
+		if _, ok := from.(*net.TCPConn); !ok || feature.HasConnZeroCopy() {
+			return from.ReadFrom(r)
+		}
 	}
 
 	// fallback to copy
 
 	// disable r.WriteTo
 	r = struct{ io.Reader }{r}
+	// disable w.ReadFrom
+	w := struct{ io.Writer }{c.Conn}
+
 	buf := pool.Get(pool.RelayBufferSize)
 	defer pool.Put(buf)
 
-	return io.CopyBuffer(c.Conn, r, buf)
+	return io.CopyBuffer(w, r, buf)
 }
 
 func (c *conn) WriteTo(w io.Writer) (int64, error) {
-	if t, ok := c.Conn.(io.WriterTo); ok {
-		return t.WriteTo(w)
+	if to, ok := c.Conn.(io.WriterTo); ok {
+		return to.WriteTo(w)
+	} else if tcpTo, ok := w.(*net.TCPConn); ok {
+		if tcpFrom, ok := c.Conn.(*net.TCPConn); ok && feature.HasConnZeroCopy() {
+			return tcpTo.ReadFrom(tcpFrom)
+		}
 	}
 
 	// fallback to copy
 
+	// disable r.WriteTo
+	r := struct{ io.Reader }{c.Conn}
 	// disable w.ReadFrom
 	w = struct{ io.Writer }{w}
+
 	buf := pool.Get(pool.RelayBufferSize)
 	defer pool.Put(buf)
 
-	return io.CopyBuffer(w, c.Conn, buf)
+	return io.CopyBuffer(w, r, buf)
 }
 
 func NewConn(c net.Conn, a C.ProxyAdapter) C.Conn {
