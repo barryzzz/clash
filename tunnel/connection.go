@@ -132,8 +132,8 @@ func handleSocket(request *adapters.SocketAdapter, outbound C.Conn) {
 	ch := make(chan error)
 
 	var inbound net.Conn = request
-	if r := request.Raw(); r != nil {
-		inbound = r
+	if t := request.TCP(); t != nil {
+		inbound = t
 	}
 
 	go func() {

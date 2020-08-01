@@ -18,9 +18,13 @@ func (s *SocketAdapter) Metadata() *C.Metadata {
 	return s.metadata
 }
 
-// Raw return underlying tcp connection
-func (s *SocketAdapter) Raw() net.Conn {
-	return s.Conn
+// TCP return underlying tcp connection
+func (s *SocketAdapter) TCP() *net.TCPConn {
+	if tcp, ok := s.Conn.(*net.TCPConn); ok {
+		return tcp
+	}
+
+	return nil
 }
 
 // NewSocket is SocketAdapter generator

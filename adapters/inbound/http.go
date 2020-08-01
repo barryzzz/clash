@@ -20,8 +20,8 @@ func (h *HTTPAdapter) Metadata() *C.Metadata {
 	return h.metadata
 }
 
-// Raw return underlying tcp connection
-func (h *HTTPAdapter) Raw() net.Conn {
+// TCP return underlying tcp connection
+func (h *HTTPAdapter) TCP() *net.TCPConn {
 	return nil // unsupported
 }
 

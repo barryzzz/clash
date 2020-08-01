@@ -31,7 +31,7 @@ const (
 type ServerAdapter interface {
 	net.Conn
 	Metadata() *Metadata
-	Raw() net.Conn // for zero-copy support
+	TCP() *net.TCPConn // for zero-copy support
 }
 
 type Connection interface {
