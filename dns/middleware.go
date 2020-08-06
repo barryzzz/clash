@@ -7,6 +7,7 @@ import (
 	"github.com/Dreamacro/clash/component/fakeip"
 	"github.com/Dreamacro/clash/component/resolver"
 	"github.com/Dreamacro/clash/log"
+
 	D "github.com/miekg/dns"
 )
 
@@ -18,7 +19,7 @@ func withHosts() middleware {
 		return func(w D.ResponseWriter, r *D.Msg) {
 			q := r.Question[0]
 
-			if q.Qclass != D.ClassINET || (q.Qtype != D.TypeA && q.Qtype != D.TypeAAAA) {
+			if !isIPRequest(q) {
 				next(w, r)
 				return
 			}
@@ -36,23 +37,24 @@ func withHosts() middleware {
 			}
 
 			ip := record.Data.(net.IP)
+			msg := r.Copy()
 
-			if q.Qtype == D.TypeA {
-				ip = ip.To4()
+			if v4 := ip.To4(); v4 != nil && q.Qtype == D.TypeA {
+				rr := &D.A{}
+				rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeA, Class: D.ClassINET, Ttl: dnsDefaultTTL}
+				rr.A = v4
+
+				msg.Answer = []D.RR{rr}
+			} else if v6 := ip.To16(); v6 != nil && q.Qtype == D.TypeAAAA {
+				rr := &D.AAAA{}
+				rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeAAAA, Class: D.ClassINET, Ttl: dnsDefaultTTL}
+				rr.AAAA = v6
+
+				msg.Answer = []D.RR{rr}
 			} else {
-				ip = ip.To16()
-			}
-
-			if ip == nil {
 				next(w, r)
 				return
 			}
-
-			rr := &D.A{}
-			rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: q.Qtype, Class: q.Qclass, Ttl: dnsDefaultTTL}
-			rr.A = ip
-			msg := r.Copy()
-			msg.Answer = []D.RR{rr}
 
 			msg.SetRcode(r, D.RcodeSuccess)
 			msg.Authoritative = true
