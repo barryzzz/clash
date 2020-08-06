@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/Dreamacro/clash/component/fakeip"
-	"github.com/Dreamacro/clash/component/resolver"
+	"github.com/Dreamacro/clash/component/trie"
 	"github.com/Dreamacro/clash/log"
 
 	D "github.com/miekg/dns"
@@ -14,18 +14,12 @@ import (
 type handler func(w D.ResponseWriter, r *D.Msg)
 type middleware func(next handler) handler
 
-func withHosts() middleware {
+func withHosts(hosts *trie.DomainTrie) middleware {
 	return func(next handler) handler {
 		return func(w D.ResponseWriter, r *D.Msg) {
 			q := r.Question[0]
 
 			if !isIPRequest(q) {
-				next(w, r)
-				return
-			}
-
-			hosts := resolver.DefaultHosts
-			if hosts == nil {
 				next(w, r)
 				return
 			}
@@ -152,7 +146,11 @@ func compose(middlewares []middleware, endpoint handler) handler {
 }
 
 func newHandler(resolver *Resolver) handler {
-	middlewares := []middleware{withHosts()}
+	middlewares := []middleware{}
+
+	if resolver.hosts != nil {
+		middlewares = append(middlewares, withHosts(resolver.hosts))
+	}
 
 	if resolver.FakeIPEnabled() {
 		middlewares = append(middlewares, withFakeIP(resolver.pool))
