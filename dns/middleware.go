@@ -1,13 +1,12 @@
 package dns
 
 import (
-	"github.com/Dreamacro/clash/component/resolver"
 	"net"
 	"strings"
 
 	"github.com/Dreamacro/clash/component/fakeip"
+	"github.com/Dreamacro/clash/component/resolver"
 	"github.com/Dreamacro/clash/log"
-
 	D "github.com/miekg/dns"
 )
 
