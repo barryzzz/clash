@@ -184,8 +184,10 @@ func newHandler(resolver *Resolver, mapper *HostMapper) handler {
 	}
 
 	if mapper.mode == FAKEIP {
-		middlewares = append(middlewares, withFakeIP(mapper.fakePool), withMapping(mapper.mapping))
-	} else if mapper.mode == MAPPING {
+		middlewares = append(middlewares, withFakeIP(mapper.fakePool))
+	}
+
+	if mapper.mode != NORMAL {
 		middlewares = append(middlewares, withMapping(mapper.mapping))
 	}
 
