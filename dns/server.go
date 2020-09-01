@@ -30,6 +30,7 @@ func (s *Server) ServeDNS(w D.ResponseWriter, r *D.Msg) {
 	msg, err := s.handler(r)
 	if err != nil {
 		D.HandleFailed(w, r)
+		return
 	}
 
 	w.WriteMsg(msg)
