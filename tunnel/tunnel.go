@@ -125,7 +125,7 @@ func preHandleMetadata(metadata *C.Metadata) error {
 
 	// preprocess enhanced-mode metadata
 	if needLookupIP(metadata) {
-		host, exist := resolver.ResolveHost(metadata.DstIP)
+		host, exist := resolver.FindHostByIP(metadata.DstIP)
 		if exist {
 			metadata.Host = host
 			metadata.AddrType = C.AtypDomainName

@@ -7,21 +7,21 @@ import (
 	"github.com/Dreamacro/clash/component/fakeip"
 )
 
-type HostMapper struct {
+type ResolverEnhancer struct {
 	mode     EnhancedMode
 	fakePool *fakeip.Pool
 	mapping  *cache.LruCache
 }
 
-func (h *HostMapper) FakeIPEnabled() bool {
+func (h *ResolverEnhancer) FakeIPEnabled() bool {
 	return h.mode == FAKEIP
 }
 
-func (h *HostMapper) MappingEnabled() bool {
+func (h *ResolverEnhancer) MappingEnabled() bool {
 	return h.mode == FAKEIP || h.mode == MAPPING
 }
 
-func (h *HostMapper) IsFakeIP(ip net.IP) bool {
+func (h *ResolverEnhancer) IsFakeIP(ip net.IP) bool {
 	if !h.FakeIPEnabled() {
 		return false
 	}
@@ -33,7 +33,7 @@ func (h *HostMapper) IsFakeIP(ip net.IP) bool {
 	return false
 }
 
-func (h *HostMapper) ResolveHost(ip net.IP) (string, bool) {
+func (h *ResolverEnhancer) FindHostByIP(ip net.IP) (string, bool) {
 	if pool := h.fakePool; pool != nil {
 		if host, existed := pool.LookBack(ip); existed {
 			return host, true
@@ -49,7 +49,7 @@ func (h *HostMapper) ResolveHost(ip net.IP) (string, bool) {
 	return "", false
 }
 
-func (h *HostMapper) Equals(o *HostMapper) bool {
+func (h *ResolverEnhancer) Equals(o *ResolverEnhancer) bool {
 	// check reusable
 
 	if h.fakePool == o.fakePool {
@@ -63,7 +63,7 @@ func (h *HostMapper) Equals(o *HostMapper) bool {
 	return h.fakePool.EqualsIgnoreHosts(o.fakePool)
 }
 
-func (h *HostMapper) Patch(o *HostMapper) {
+func (h *ResolverEnhancer) Patch(o *ResolverEnhancer) {
 	if h.fakePool == nil || o.fakePool == nil {
 		return
 	}
@@ -71,7 +71,7 @@ func (h *HostMapper) Patch(o *HostMapper) {
 	h.fakePool.PatchHosts(o.fakePool)
 }
 
-func NewHostMapper(cfg Config) *HostMapper {
+func NewEnhancer(cfg Config) *ResolverEnhancer {
 	var fakePool *fakeip.Pool
 	var mapping *cache.LruCache
 
@@ -80,7 +80,7 @@ func NewHostMapper(cfg Config) *HostMapper {
 		mapping = cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true))
 	}
 
-	return &HostMapper{
+	return &ResolverEnhancer{
 		mode:     cfg.EnhancedMode,
 		fakePool: fakePool,
 		mapping:  mapping,

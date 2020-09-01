@@ -4,13 +4,13 @@ import (
 	"net"
 )
 
-var DefaultHostMapper HostMapper
+var DefaultHostMapper Enhancer
 
-type HostMapper interface {
+type Enhancer interface {
 	FakeIPEnabled() bool
 	MappingEnabled() bool
 	IsFakeIP(net.IP) bool
-	ResolveHost(net.IP) (string, bool)
+	FindHostByIP(net.IP) (string, bool)
 }
 
 func FakeIPEnabled() bool {
@@ -37,9 +37,9 @@ func IsFakeIP(ip net.IP) bool {
 	return false
 }
 
-func ResolveHost(ip net.IP) (string, bool) {
+func FindHostByIP(ip net.IP) (string, bool) {
 	if mapper := DefaultHostMapper; mapper != nil {
-		return mapper.ResolveHost(ip)
+		return mapper.FindHostByIP(ip)
 	}
 
 	return "", false
