@@ -89,6 +89,11 @@ func (p *Pool) Gateway() net.IP {
 	return uintToIP(p.gateway)
 }
 
+// EqualsIgnoreHosts return if range of p equals o
+func (p *Pool) EqualsIgnoreHosts(o *Pool) bool {
+	return p.gateway == o.gateway && p.min == o.min && p.max == o.max
+}
+
 func (p *Pool) get(host string) net.IP {
 	current := p.offset
 	for {

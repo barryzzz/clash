@@ -52,15 +52,15 @@ func (h *HostMapper) ResolveHost(ip net.IP) (string, bool) {
 func (h *HostMapper) Equals(o *HostMapper) bool {
 	// check reusable
 
-	if h.FakeIPEnabled() == o.FakeIPEnabled() {
-		if h.FakeIPEnabled() {
-			return h.fakePool.Gateway().Equal(o.fakePool.Gateway())
-		}
-
+	if h.fakePool == o.fakePool {
 		return true
 	}
 
-	return false
+	if h.fakePool == nil || o.fakePool == nil {
+		return false
+	}
+
+	return h.fakePool.EqualsIgnoreHosts(o.fakePool)
 }
 
 func NewHostMapper(cfg Config) *HostMapper {
