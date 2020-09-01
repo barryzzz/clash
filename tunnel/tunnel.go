@@ -119,7 +119,6 @@ func needLookupIP(metadata *C.Metadata) bool {
 func preHandleMetadata(metadata *C.Metadata) error {
 	// handle IP string on host
 	if ip := net.ParseIP(metadata.Host); ip != nil {
-		metadata.Host = ""
 		metadata.DstIP = ip
 	}
 
