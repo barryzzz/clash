@@ -94,6 +94,11 @@ func (p *Pool) EqualsIgnoreHosts(o *Pool) bool {
 	return p.gateway == o.gateway && p.min == o.min && p.max == o.max
 }
 
+// PatchHosts replace p.host with o.host
+func (p *Pool) PatchHosts(o *Pool) {
+	p.host = o.host
+}
+
 func (p *Pool) get(host string) net.IP {
 	current := p.offset
 	for {

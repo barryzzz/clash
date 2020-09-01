@@ -63,6 +63,14 @@ func (h *HostMapper) Equals(o *HostMapper) bool {
 	return h.fakePool.EqualsIgnoreHosts(o.fakePool)
 }
 
+func (h *HostMapper) Patch(o *HostMapper) {
+	if h.fakePool == nil || o.fakePool == nil {
+		return
+	}
+
+	h.fakePool.PatchHosts(o.fakePool)
+}
+
 func NewHostMapper(cfg Config) *HostMapper {
 	var fakePool *fakeip.Pool
 	var mapping *cache.LruCache
