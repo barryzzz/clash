@@ -60,15 +60,7 @@ func (h *ResolverEnhancer) Equals(o *ResolverEnhancer) bool {
 		return false
 	}
 
-	return h.fakePool.EqualsIgnoreHosts(o.fakePool)
-}
-
-func (h *ResolverEnhancer) Patch(o *ResolverEnhancer) {
-	if h.fakePool == nil || o.fakePool == nil {
-		return
-	}
-
-	h.fakePool.PatchHosts(o.fakePool)
+	return h.fakePool.Equals(o.fakePool)
 }
 
 func NewEnhancer(cfg Config) *ResolverEnhancer {
