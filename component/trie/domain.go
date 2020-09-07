@@ -129,6 +129,10 @@ func (t *DomainTrie) search(node *Node, parts []string) *Node {
 	return nil
 }
 
+func (t *DomainTrie) Equals(other *DomainTrie) bool {
+	return t.root.equals(other.root)
+}
+
 // New returns a new, empty Trie.
 func New() *DomainTrie {
 	return &DomainTrie{root: newNode(nil)}
