@@ -97,39 +97,3 @@ func TestTrie_Boundary(t *testing.T) {
 	assert.NotNil(t, tree.Insert("..dev", localIP))
 	assert.Nil(t, tree.Search("dev"))
 }
-
-func TestTrie_Equals(t *testing.T) {
-	obj := struct{}{}
-
-	a := New()
-
-	a.Insert("*.google.com", obj)
-	a.Insert("+.github.com", obj)
-	a.Insert(".facebook.com", obj)
-	a.Insert("microsoft.com", obj)
-
-	b := New()
-
-	b.Insert("*.google.com", obj)
-	b.Insert("+.github.com", obj)
-	b.Insert(".facebook.com", obj)
-	b.Insert("microsoft.com", obj)
-
-	c := New()
-
-	c.Insert("*.google.com", obj)
-	c.Insert("+.github.com", obj)
-	c.Insert(".facebook.com", obj)
-
-	d := New()
-
-	d.Insert("*.google.com", obj)
-	d.Insert("+.github.com", obj)
-	d.Insert(".facebook.com", obj)
-	d.Insert("microsoft.com", obj)
-	d.Insert("pixiv.net", obj)
-
-	assert.True(t, a.Equals(b))
-	assert.False(t, a.Equals(c))
-	assert.False(t, a.Equals(d))
-}
