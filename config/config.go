@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/Dreamacro/clash/component/fakeip"
 	"net"
 	"net/url"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"github.com/Dreamacro/clash/adapters/outboundgroup"
 	"github.com/Dreamacro/clash/adapters/provider"
 	"github.com/Dreamacro/clash/component/auth"
-	"github.com/Dreamacro/clash/component/fakeip"
 	"github.com/Dreamacro/clash/component/trie"
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/dns"
@@ -61,7 +61,8 @@ type DNS struct {
 	Listen            string           `yaml:"listen"`
 	EnhancedMode      dns.EnhancedMode `yaml:"enhanced-mode"`
 	DefaultNameserver []dns.NameServer `yaml:"default-nameserver"`
-	FakeIPRange       *fakeip.Pool
+	FakeIPRange       *fakeip.Range
+	FakeIPFilter      *trie.DomainTrie
 	Hosts             *trie.DomainTrie
 }
 
@@ -540,6 +541,11 @@ func parseDNS(cfg RawDNS, hosts *trie.DomainTrie) (*DNS, error) {
 			return nil, err
 		}
 
+		r, err := fakeip.ParseRange(ipnet)
+		if err != nil {
+			return nil, err
+		}
+
 		var host *trie.DomainTrie
 		// fake ip skip host filter
 		if len(cfg.FakeIPFilter) != 0 {
@@ -549,12 +555,8 @@ func parseDNS(cfg RawDNS, hosts *trie.DomainTrie) (*DNS, error) {
 			}
 		}
 
-		pool, err := fakeip.New(ipnet, 1000, host)
-		if err != nil {
-			return nil, err
-		}
-
-		dnsCfg.FakeIPRange = pool
+		dnsCfg.FakeIPRange = r
+		dnsCfg.FakeIPFilter = host
 	}
 
 	dnsCfg.FallbackFilter.GeoIP = cfg.FallbackFilter.GeoIP

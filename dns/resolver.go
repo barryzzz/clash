@@ -5,13 +5,13 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Dreamacro/clash/component/fakeip"
 	"math/rand"
 	"net"
 	"time"
 
 	"github.com/Dreamacro/clash/common/cache"
 	"github.com/Dreamacro/clash/common/picker"
-	"github.com/Dreamacro/clash/component/fakeip"
 	"github.com/Dreamacro/clash/component/resolver"
 	"github.com/Dreamacro/clash/component/trie"
 
@@ -265,7 +265,8 @@ type Config struct {
 	IPv6           bool
 	EnhancedMode   EnhancedMode
 	FallbackFilter FallbackFilter
-	Pool           *fakeip.Pool
+	FakeIPRange    *fakeip.Range
+	FakeIPFilter   *trie.DomainTrie
 	Hosts          *trie.DomainTrie
 }
 
