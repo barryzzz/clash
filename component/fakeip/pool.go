@@ -31,11 +31,12 @@ func (p *Pool) Lookup(host string) net.IP {
 	if elm, exist := p.cache.Get(host); exist {
 		ip := elm.(net.IP)
 
-		// ensure ip --> host on head of linked list
+		// ensure ip --> host existed and on head of linked list
 		n := ipToUint(ip.To4())
 		offset := n - p.min + 1
-		p.cache.Get(offset)
-		return ip
+		if _, exist := p.cache.Get(offset); exist {
+			return ip
+		}
 	}
 
 	ip := p.get(host)
@@ -58,9 +59,10 @@ func (p *Pool) LookBack(ip net.IP) (string, bool) {
 	if elm, exist := p.cache.Get(offset); exist {
 		host := elm.(string)
 
-		// ensure host --> ip on head of linked list
-		p.cache.Get(host)
-		return host, true
+		// ensure host --> ip existed and on head of linked list
+		if _, exist := p.cache.Get(host); exist {
+			return host, true
+		}
 	}
 
 	return "", false
