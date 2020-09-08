@@ -11,7 +11,7 @@ import (
 func TestPool_Basic(t *testing.T) {
 	_, ipnet, _ := net.ParseCIDR("192.168.0.1/29")
 	r, _ := ParseRange(ipnet)
-	pool := NewWithCache(r, nil, cache.NewLRUCache(cache.WithSize(10*2)))
+	pool := New(r, nil, cache.NewLRUCache(cache.WithSize(10*2)))
 
 	first := pool.Lookup("foo.com")
 	last := pool.Lookup("bar.com")
@@ -26,7 +26,7 @@ func TestPool_Basic(t *testing.T) {
 func TestPool_Cycle(t *testing.T) {
 	_, ipnet, _ := net.ParseCIDR("192.168.0.1/30")
 	r, _ := ParseRange(ipnet)
-	pool := NewWithCache(r, nil, cache.NewLRUCache(cache.WithSize(10*2)))
+	pool := New(r, nil, cache.NewLRUCache(cache.WithSize(10*2)))
 
 	first := pool.Lookup("foo.com")
 	same := pool.Lookup("baz.com")
@@ -37,7 +37,7 @@ func TestPool_Cycle(t *testing.T) {
 func TestPool_MaxCacheSize(t *testing.T) {
 	_, ipnet, _ := net.ParseCIDR("192.168.0.1/24")
 	r, _ := ParseRange(ipnet)
-	pool := NewWithCache(r, nil, cache.NewLRUCache(cache.WithSize(2*2)))
+	pool := New(r, nil, cache.NewLRUCache(cache.WithSize(2*2)))
 
 	first := pool.Lookup("foo.com")
 	pool.Lookup("bar.com")
@@ -50,7 +50,7 @@ func TestPool_MaxCacheSize(t *testing.T) {
 func TestPool_DoubleMapping(t *testing.T) {
 	_, ipnet, _ := net.ParseCIDR("192.168.0.1/24")
 	r, _ := ParseRange(ipnet)
-	pool := NewWithCache(r, nil, cache.NewLRUCache(cache.WithSize(2*2)))
+	pool := New(r, nil, cache.NewLRUCache(cache.WithSize(2*2)))
 
 	// fill cache
 	fooIP := pool.Lookup("foo.com")

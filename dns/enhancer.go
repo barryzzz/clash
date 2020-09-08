@@ -60,7 +60,7 @@ func NewEnhancer(cfg Config) *ResolverEnhancer {
 	}
 
 	if cfg.EnhancedMode == FAKEIP {
-		fakePool = fakeip.NewWithCache(cfg.FakeIPRange, cfg.FakeIPFilter, mapping)
+		fakePool = fakeip.New(cfg.FakeIPRange, cfg.FakeIPFilter, mapping)
 	}
 
 	return &ResolverEnhancer{
