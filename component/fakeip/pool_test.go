@@ -1,10 +1,9 @@
 package fakeip
 
 import (
+	"github.com/Dreamacro/clash/common/cache"
 	"net"
 	"testing"
-
-	"github.com/Dreamacro/clash/common/cache"
 
 	"github.com/stretchr/testify/assert"
 )

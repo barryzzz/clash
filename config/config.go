@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/Dreamacro/clash/component/fakeip"
 	"net"
 	"net/url"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"github.com/Dreamacro/clash/adapters/outboundgroup"
 	"github.com/Dreamacro/clash/adapters/provider"
 	"github.com/Dreamacro/clash/component/auth"
-	"github.com/Dreamacro/clash/component/fakeip"
 	"github.com/Dreamacro/clash/component/trie"
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/dns"
