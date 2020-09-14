@@ -49,26 +49,14 @@ func (h *ResolverEnhancer) FindHostByIP(ip net.IP) (string, bool) {
 	return "", false
 }
 
-func (h *ResolverEnhancer) Equals(o *ResolverEnhancer) bool {
-	// check reusable
-
-	if h.fakePool == o.fakePool {
-		return true
-	}
-
-	if h.fakePool == nil || o.fakePool == nil {
-		return false
-	}
-
-	return h.fakePool.EqualsIgnoreHosts(o.fakePool)
-}
-
 func (h *ResolverEnhancer) Patch(o *ResolverEnhancer) {
-	if h.fakePool == nil || o.fakePool == nil {
-		return
+	if h.mapping != nil && o.mapping != nil {
+		h.mapping = o.mapping
 	}
 
-	h.fakePool.PatchHosts(o.fakePool)
+	if h.fakePool != nil && o.fakePool != nil {
+		h.fakePool.PatchCache(o.fakePool)
+	}
 }
 
 func NewEnhancer(cfg Config) *ResolverEnhancer {

@@ -126,12 +126,8 @@ func updateDNS(c *config.DNS) {
 	m := dns.NewEnhancer(cfg)
 
 	// reuse cache of old host mapper
-	if resolver.DefaultHostMapper != nil {
-		if resolver.DefaultHostMapper.(*dns.ResolverEnhancer).Equals(m) {
-			old := resolver.DefaultHostMapper.(*dns.ResolverEnhancer)
-			old.Patch(m)
-			m = old
-		}
+	if old := resolver.DefaultHostMapper; old != nil {
+		m.Patch(old.(*dns.ResolverEnhancer))
 	}
 
 	resolver.DefaultResolver = r

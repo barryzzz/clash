@@ -89,14 +89,9 @@ func (p *Pool) Gateway() net.IP {
 	return uintToIP(p.gateway)
 }
 
-// EqualsIgnoreHosts return if range of p equals o
-func (p *Pool) EqualsIgnoreHosts(o *Pool) bool {
-	return p.gateway == o.gateway && p.min == o.min && p.max == o.max
-}
-
-// PatchHosts replace p.host with o.host
-func (p *Pool) PatchHosts(o *Pool) {
-	p.host = o.host
+// PatchCache replace p.cache with o
+func (p *Pool) PatchCache(o *Pool) {
+	p.cache = o.cache
 }
 
 func (p *Pool) get(host string) net.IP {
