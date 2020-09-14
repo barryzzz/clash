@@ -113,8 +113,7 @@ func updateDNS(c *config.DNS) {
 		Fallback:     c.Fallback,
 		IPv6:         c.IPv6,
 		EnhancedMode: c.EnhancedMode,
-		FakeIPRange:  c.FakeIPRange,
-		FakeIPFilter: c.FakeIPFilter,
+		Pool:         c.FakeIPRange,
 		Hosts:        c.Hosts,
 		FallbackFilter: dns.FallbackFilter{
 			GeoIP:  c.FallbackFilter.GeoIP,
@@ -125,6 +124,15 @@ func updateDNS(c *config.DNS) {
 
 	r := dns.NewResolver(cfg)
 	m := dns.NewEnhancer(cfg)
+
+	// reuse cache of old host mapper
+	if resolver.DefaultHostMapper != nil {
+		if resolver.DefaultHostMapper.(*dns.ResolverEnhancer).Equals(m) {
+			old := resolver.DefaultHostMapper.(*dns.ResolverEnhancer)
+			old.Patch(m)
+			m = old
+		}
+	}
 
 	resolver.DefaultResolver = r
 	resolver.DefaultHostMapper = m

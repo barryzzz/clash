@@ -7,8 +7,6 @@ import (
 	"github.com/Dreamacro/clash/component/fakeip"
 )
 
-var globalEnhancerMapping = cache.NewLRUCache(cache.WithSize(4096))
-
 type ResolverEnhancer struct {
 	mode     EnhancedMode
 	fakePool *fakeip.Pool
@@ -51,16 +49,35 @@ func (h *ResolverEnhancer) FindHostByIP(ip net.IP) (string, bool) {
 	return "", false
 }
 
-func NewEnhancer(cfg Config) *ResolverEnhancer {
-	var mapping *cache.LruCache
-	var fakePool *fakeip.Pool
+func (h *ResolverEnhancer) Equals(o *ResolverEnhancer) bool {
+	// check reusable
 
-	if cfg.EnhancedMode != NORMAL {
-		mapping = globalEnhancerMapping
+	if h.fakePool == o.fakePool {
+		return true
 	}
 
-	if cfg.EnhancedMode == FAKEIP {
-		fakePool = fakeip.NewWithCache(cfg.FakeIPRange, cfg.FakeIPFilter, mapping)
+	if h.fakePool == nil || o.fakePool == nil {
+		return false
+	}
+
+	return h.fakePool.EqualsIgnoreHosts(o.fakePool)
+}
+
+func (h *ResolverEnhancer) Patch(o *ResolverEnhancer) {
+	if h.fakePool == nil || o.fakePool == nil {
+		return
+	}
+
+	h.fakePool.PatchHosts(o.fakePool)
+}
+
+func NewEnhancer(cfg Config) *ResolverEnhancer {
+	var fakePool *fakeip.Pool
+	var mapping *cache.LruCache
+
+	if cfg.EnhancedMode != NORMAL {
+		fakePool = cfg.Pool
+		mapping = cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true))
 	}
 
 	return &ResolverEnhancer{

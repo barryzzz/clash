@@ -9,19 +9,15 @@ import (
 	"github.com/Dreamacro/clash/component/trie"
 )
 
-type Range struct {
+// Pool is a implementation about fake ip generator without storage
+type Pool struct {
 	max     uint32
 	min     uint32
 	gateway uint32
 	offset  uint32
-}
-
-// Pool is a implementation about fake ip generator without storage
-type Pool struct {
-	*Range
-	mux   sync.Mutex
-	host  *trie.DomainTrie
-	cache *cache.LruCache
+	mux     sync.Mutex
+	host    *trie.DomainTrie
+	cache   *cache.LruCache
 }
 
 // Lookup return a fake ip with host
@@ -93,6 +89,16 @@ func (p *Pool) Gateway() net.IP {
 	return uintToIP(p.gateway)
 }
 
+// EqualsIgnoreHosts return if range of p equals o
+func (p *Pool) EqualsIgnoreHosts(o *Pool) bool {
+	return p.gateway == o.gateway && p.min == o.min && p.max == o.max
+}
+
+// PatchHosts replace p.host with o.host
+func (p *Pool) PatchHosts(o *Pool) {
+	p.host = o.host
+}
+
 func (p *Pool) get(host string) net.IP {
 	current := p.offset
 	for {
@@ -123,7 +129,8 @@ func uintToIP(v uint32) net.IP {
 	return net.IPv4(byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
-func ParseRange(ipnet *net.IPNet) (*Range, error) {
+// New return Pool instance
+func New(ipnet *net.IPNet, size int, host *trie.DomainTrie) (*Pool, error) {
 	min := ipToUint(ipnet.IP) + 2
 
 	ones, bits := ipnet.Mask.Size()
@@ -134,23 +141,11 @@ func ParseRange(ipnet *net.IPNet) (*Range, error) {
 	}
 
 	max := min + uint32(total) - 1
-	return &Range{
-		max:     max,
-		min:     min,
-		gateway: min - 1,
-		offset:  0,
-	}, nil
-}
-
-// New return Pool instance with cache
-func NewWithCache(r *Range, host *trie.DomainTrie, cache *cache.LruCache) *Pool {
-	if r.max-r.min <= 0 {
-		panic("ipnet don't have valid ip")
-	}
-
 	return &Pool{
-		Range: r,
-		host:  host,
-		cache: cache,
-	}
+		min:     min,
+		max:     max,
+		gateway: min - 1,
+		host:    host,
+		cache:   cache.NewLRUCache(cache.WithSize(size * 2)),
+	}, nil
 }
