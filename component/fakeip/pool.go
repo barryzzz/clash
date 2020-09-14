@@ -142,10 +142,10 @@ func ParseRange(ipnet *net.IPNet) (*Range, error) {
 	}, nil
 }
 
-// NewWithCache return Pool instance with cache
+// New return Pool instance with cache
 func NewWithCache(r *Range, host *trie.DomainTrie, cache *cache.LruCache) *Pool {
-	if r.max-r.min <= 0 || cache == nil {
-		panic("ipnet don't have valid ip or cache invalid")
+	if r.max-r.min <= 0 {
+		panic("ipnet don't have valid ip")
 	}
 
 	return &Pool{
