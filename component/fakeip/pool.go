@@ -13,19 +13,15 @@ type Range struct {
 	max     uint32
 	min     uint32
 	gateway uint32
-}
-
-type Cache struct {
-	cache *cache.LruCache
+	offset  uint32
 }
 
 // Pool is a implementation about fake ip generator without storage
 type Pool struct {
 	*Range
-	*Cache
-	offset uint32
-	mux    sync.Mutex
-	host   *trie.DomainTrie
+	mux   sync.Mutex
+	host  *trie.DomainTrie
+	cache *cache.LruCache
 }
 
 // Lookup return a fake ip with host
@@ -38,8 +34,9 @@ func (p *Pool) Lookup(host string) net.IP {
 		// ensure ip --> host existed and on head of linked list
 		n := ipToUint(ip.To4())
 		offset := n - p.min + 1
-		p.cache.Get(offset)
-		return ip
+		if _, exist := p.cache.Get(offset); exist {
+			return ip
+		}
 	}
 
 	ip := p.get(host)
@@ -63,8 +60,9 @@ func (p *Pool) LookBack(ip net.IP) (string, bool) {
 		host := elm.(string)
 
 		// ensure host --> ip existed and on head of linked list
-		p.cache.Get(host)
-		return host, true
+		if _, exist := p.cache.Get(host); exist {
+			return host, true
+		}
 	}
 
 	return "", false
@@ -142,22 +140,19 @@ func ParseRange(ipnet *net.IPNet) (*Range, error) {
 		max:     max,
 		min:     min,
 		gateway: min - 1,
+		offset:  0,
 	}, nil
 }
 
-func NewCache(size int) *Cache {
-	return &Cache{cache: cache.NewLRUCache(cache.WithSize(size * 2))}
-}
-
 // New return Pool instance with cache
-func New(r *Range, host *trie.DomainTrie, cache *Cache) *Pool {
-	if r.max-r.min <= 0 || cache == nil || cache.cache == nil {
+func New(r *Range, host *trie.DomainTrie, cache *cache.LruCache) *Pool {
+	if r.max-r.min <= 0 || cache == nil {
 		panic("ipnet don't have valid ip or cache invalid")
 	}
 
 	return &Pool{
 		Range: r,
-		Cache: cache,
 		host:  host,
+		cache: cache,
 	}
 }

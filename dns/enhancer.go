@@ -8,7 +8,6 @@ import (
 )
 
 var globalEnhancerMapping = cache.NewLRUCache(cache.WithSize(4096))
-var globalEnhancerFakeIPMapping = fakeip.NewCache(4096)
 
 type ResolverEnhancer struct {
 	mode     EnhancedMode
@@ -61,7 +60,7 @@ func NewEnhancer(cfg Config) *ResolverEnhancer {
 	}
 
 	if cfg.EnhancedMode == FAKEIP {
-		fakePool = fakeip.New(cfg.FakeIPRange, cfg.FakeIPFilter, globalEnhancerFakeIPMapping)
+		fakePool = fakeip.New(cfg.FakeIPRange, cfg.FakeIPFilter, mapping)
 	}
 
 	return &ResolverEnhancer{
