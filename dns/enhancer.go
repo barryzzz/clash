@@ -49,13 +49,13 @@ func (h *ResolverEnhancer) FindHostByIP(ip net.IP) (string, bool) {
 	return "", false
 }
 
-func (h *ResolverEnhancer) Patch(o *ResolverEnhancer) {
+func (h *ResolverEnhancer) PatchFrom(o *ResolverEnhancer) {
 	if h.mapping != nil && o.mapping != nil {
-		h.mapping = o.mapping
+		o.mapping.CloneTo(h.mapping)
 	}
 
 	if h.fakePool != nil && o.fakePool != nil {
-		h.fakePool.PatchCache(o.fakePool)
+		h.fakePool.PatchFrom(o.fakePool)
 	}
 }
 

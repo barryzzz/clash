@@ -89,9 +89,9 @@ func (p *Pool) Gateway() net.IP {
 	return uintToIP(p.gateway)
 }
 
-// PatchCache replace p.cache with o
-func (p *Pool) PatchCache(o *Pool) {
-	p.cache = o.cache
+// PatchFrom clone cache from old pool
+func (p *Pool) PatchFrom(o *Pool) {
+	o.cache.CloneTo(p.cache)
 }
 
 func (p *Pool) get(host string) net.IP {
