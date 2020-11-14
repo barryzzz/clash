@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"math/rand"
 	"net"
 	"strings"
 	"time"
@@ -46,38 +45,61 @@ type Resolver struct {
 }
 
 // ResolveIP request with TypeA and TypeAAAA, priority return TypeA
-func (r *Resolver) ResolveIP(host string) (ip net.IP, err error) {
-	ch := make(chan net.IP, 1)
-	go func() {
-		defer close(ch)
-		ip, err := r.resolveIP(host, D.TypeAAAA)
-		if err != nil {
-			return
+func (r *Resolver) ResolveIPs(host string, v4, v6 bool) ([]net.IP, error) {
+	if ip := net.ParseIP(host); ip != nil {
+		isIPv4 := ip.To4() != nil
+		if v6 && !isIPv4 {
+			return []net.IP{ip}, nil
+		} else if v4 && isIPv4 {
+			return []net.IP{ip}, nil
+		} else {
+			return nil, resolver.ErrIPVersion
 		}
-		ch <- ip
-	}()
-
-	ip, err = r.resolveIP(host, D.TypeA)
-	if err == nil {
-		return
 	}
 
-	ip, open := <-ch
-	if !open {
-		return nil, resolver.ErrIPNotFound
+	resolve := func(result chan []net.IP, dnsType uint16) {
+		ips, _ := r.resolveIP(host, dnsType)
+
+		result <- ips
 	}
 
-	return ip, nil
-}
+	v4Ch := make(chan []net.IP)
+	v6Ch := make(chan []net.IP)
 
-// ResolveIPv4 request with TypeA
-func (r *Resolver) ResolveIPv4(host string) (ip net.IP, err error) {
-	return r.resolveIP(host, D.TypeA)
-}
+	if v4 {
+		go resolve(v4Ch, D.TypeA)
+	} else {
+		close(v4Ch)
+	}
 
-// ResolveIPv6 request with TypeAAAA
-func (r *Resolver) ResolveIPv6(host string) (ip net.IP, err error) {
-	return r.resolveIP(host, D.TypeAAAA)
+	if v6 {
+		go resolve(v6Ch, D.TypeAAAA)
+	} else {
+		close(v6Ch)
+	}
+
+	v4Result := <-v4Ch
+	v6Result := <-v6Ch
+
+	ips := make([]net.IP, 0, len(v4Result)+len(v6Result))
+
+	if v4Result != nil {
+		for _, ip := range v4Result {
+			ips = append(ips, ip)
+		}
+	}
+
+	if v6Result != nil {
+		for _, ip := range v6Result {
+			ips = append(ips, ip)
+		}
+	}
+
+	if len(ips) > 0 {
+		return ips, nil
+	}
+
+	return nil, resolver.ErrIPNotFound
 }
 
 func (r *Resolver) shouldIPFallback(ip net.IP) bool {
@@ -193,7 +215,6 @@ func (r *Resolver) shouldOnlyQueryFallback(m *D.Msg) bool {
 }
 
 func (r *Resolver) ipExchange(m *D.Msg) (msg *D.Msg, err error) {
-
 	onlyFallback := r.shouldOnlyQueryFallback(m)
 
 	if onlyFallback {
@@ -226,19 +247,7 @@ func (r *Resolver) ipExchange(m *D.Msg) (msg *D.Msg, err error) {
 	return
 }
 
-func (r *Resolver) resolveIP(host string, dnsType uint16) (ip net.IP, err error) {
-	ip = net.ParseIP(host)
-	if ip != nil {
-		isIPv4 := ip.To4() != nil
-		if dnsType == D.TypeAAAA && !isIPv4 {
-			return ip, nil
-		} else if dnsType == D.TypeA && isIPv4 {
-			return ip, nil
-		} else {
-			return nil, resolver.ErrIPVersion
-		}
-	}
-
+func (r *Resolver) resolveIP(host string, dnsType uint16) ([]net.IP, error) {
 	query := &D.Msg{}
 	query.SetQuestion(D.Fqdn(host), dnsType)
 
@@ -247,18 +256,11 @@ func (r *Resolver) resolveIP(host string, dnsType uint16) (ip net.IP, err error)
 		return nil, err
 	}
 
-	ips := r.msgToIP(msg)
-	ipLength := len(ips)
-	if ipLength == 0 {
-		return nil, resolver.ErrIPNotFound
-	}
-
-	ip = ips[rand.Intn(ipLength)]
-	return
+	return r.msgToIP(msg), nil
 }
 
 func (r *Resolver) msgToIP(msg *D.Msg) []net.IP {
-	ips := []net.IP{}
+	ips := make([]net.IP, 0, len(msg.Answer))
 
 	for _, answer := range msg.Answer {
 		switch ans := answer.(type) {
