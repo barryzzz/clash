@@ -83,16 +83,12 @@ func (r *Resolver) ResolveIPs(host string, v4, v6 bool) ([]net.IP, error) {
 
 	ips := make([]net.IP, 0, len(v4Result)+len(v6Result))
 
-	if v4Result != nil {
-		for _, ip := range v4Result {
-			ips = append(ips, ip)
-		}
+	for _, ip := range v4Result {
+		ips = append(ips, ip)
 	}
 
-	if v6Result != nil {
-		for _, ip := range v6Result {
-			ips = append(ips, ip)
-		}
+	for _, ip := range v6Result {
+		ips = append(ips, ip)
 	}
 
 	if len(ips) > 0 {
