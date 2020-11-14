@@ -113,9 +113,13 @@ func dualMultipleIPsDialContext(ctx context.Context, network, address string) (n
 
 	conn := fast.Wait()
 
+	if conn != nil {
+		return conn.(net.Conn), nil
+	}
+
 	if fast.Error() != nil {
 		return nil, fast.Error()
 	}
 
-	return conn.(net.Conn), nil
+	return nil, ErrAddrNotFound
 }
