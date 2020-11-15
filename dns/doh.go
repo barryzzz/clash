@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/Dreamacro/clash/component/dialer"
+	"github.com/Dreamacro/clash/component/resolver"
 
 	D "github.com/miekg/dns"
 )
@@ -83,7 +84,7 @@ func newDoHClient(url string, r *Resolver) *dohClient {
 					return nil, err
 				}
 
-				ips, err := r.ResolveIPs(host, true, true)
+				ips, err := r.ResolveIPs(host, resolver.FlagResolveIPv4|resolver.FlagResolveIPv6|resolver.FlagPreferIPv4)
 				if err != nil {
 					return nil, err
 				}

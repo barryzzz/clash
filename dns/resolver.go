@@ -45,12 +45,12 @@ type Resolver struct {
 }
 
 // ResolveIP request with TypeA and TypeAAAA, priority return TypeA
-func (r *Resolver) ResolveIPs(host string, v4, v6 bool) ([]net.IP, error) {
+func (r *Resolver) ResolveIPs(host string, flags resolver.ResolveFlag) ([]net.IP, error) {
 	if ip := net.ParseIP(host); ip != nil {
 		isIPv4 := ip.To4() != nil
-		if v6 && !isIPv4 {
+		if flags&resolver.FlagResolveIPv6 == 1 && !isIPv4 {
 			return []net.IP{ip}, nil
-		} else if v4 && isIPv4 {
+		} else if flags&resolver.FlagResolveIPv4 == 1 && isIPv4 {
 			return []net.IP{ip}, nil
 		} else {
 			return nil, resolver.ErrIPVersion
@@ -66,16 +66,16 @@ func (r *Resolver) ResolveIPs(host string, v4, v6 bool) ([]net.IP, error) {
 	v4Ch := make(chan []net.IP)
 	v6Ch := make(chan []net.IP)
 
-	if v4 {
-		go resolve(v4Ch, D.TypeA)
-	} else {
-		close(v4Ch)
-	}
-
-	if v6 {
+	if flags&resolver.FlagResolveIPv6 == 1 {
 		go resolve(v6Ch, D.TypeAAAA)
 	} else {
 		close(v6Ch)
+	}
+
+	if flags&resolver.FlagResolveIPv4 == 1 {
+		go resolve(v4Ch, D.TypeA)
+	} else {
+		close(v4Ch)
 	}
 
 	v4Result := <-v4Ch
@@ -83,8 +83,13 @@ func (r *Resolver) ResolveIPs(host string, v4, v6 bool) ([]net.IP, error) {
 
 	ips := make([]net.IP, 0, len(v4Result)+len(v6Result))
 
-	ips = append(ips, v4Result...)
-	ips = append(ips, v6Result...)
+	if (flags&resolver.FlagPreferIPv4 == 0) && (flags&resolver.FlagPreferIPv6 != 0) {
+		ips = append(ips, v6Result...)
+		ips = append(ips, v4Result...)
+	} else {
+		ips = append(ips, v4Result...)
+		ips = append(ips, v6Result...)
+	}
 
 	if len(ips) > 0 {
 		return ips, nil
