@@ -25,41 +25,28 @@ func Dial(network, address string) (net.Conn, error) {
 }
 
 func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+
+	var ips []net.IP
+
 	switch network {
-	case "tcp4", "tcp6", "udp4", "udp6":
-		host, port, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, err
-		}
-
-		dialer, err := Dialer()
-		if err != nil {
-			return nil, err
-		}
-
-		var ip net.IP
-		switch network {
-		case "tcp4", "udp4":
-			ip, err = resolver.ResolveIPv4(host)
-		default:
-			ip, err = resolver.ResolveIPv6(host)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		if DialHook != nil {
-			if err := DialHook(dialer, network, ip); err != nil {
-				return nil, err
-			}
-		}
-		return dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+	case "tcp4", "udp4":
+		ips, err = resolver.ResolveIPs(host, resolver.FlagResolveIPv4)
+	case "tcp6", "udp6":
+		ips, err = resolver.ResolveIPs(host, resolver.FlagResolveIPv6)
 	case "tcp", "udp":
-		return multipleIPsDialContext(ctx, network, address)
+		ips, err = resolver.ResolveIPs(host, resolver.FlagResolveIPv4|resolver.FlagResolveIPv6)
 	default:
 		return nil, errors.New("network invalid")
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	return parallelDialContext(ctx, network, ips, port)
 }
 
 func ListenPacket(network, address string) (net.PacketConn, error) {
@@ -75,17 +62,7 @@ func ListenPacket(network, address string) (net.PacketConn, error) {
 	return cfg.ListenPacket(context.Background(), network, address)
 }
 
-func multipleIPsDialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		return nil, err
-	}
-
-	ips, err := resolver.ResolveIPs(host)
-	if err != nil {
-		return nil, err
-	}
-
+func parallelDialContext(ctx context.Context, network string, ips []net.IP, port string) (net.Conn, error) {
 	dialer, err := Dialer()
 	if err != nil {
 		return nil, err
