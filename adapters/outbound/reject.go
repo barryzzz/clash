@@ -148,15 +148,14 @@ func (rw *NopConn) process() {
 
 		rw.timer.Reset(interval)
 
-		select {
-		case <-rw.timer.C:
-			rw.mutex.Lock()
-			rw.cond.Broadcast()
-			rw.mutex.Unlock()
+		<-rw.timer.C
 
-			if rw.closeAt.Before(time.Now()) {
-				rw.Close()
-			}
+		rw.mutex.Lock()
+		rw.cond.Broadcast()
+		rw.mutex.Unlock()
+
+		if rw.closeAt.Before(time.Now()) {
+			rw.Close()
 		}
 	}
 }
