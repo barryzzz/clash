@@ -70,13 +70,15 @@ func (rw *NopConn) Read(b []byte) (int, error) {
 	rw.mutex.Lock()
 	defer rw.mutex.Unlock()
 
-	if rw.closed {
-		return 0, io.EOF
-	} else {
+	if !rw.closed {
 		rw.cond.Wait()
 	}
 
-	return 0, io.EOF
+	if rw.closed {
+		return 0, io.EOF
+	}
+
+	return 0, io.ErrNoProgress
 }
 
 func (rw *NopConn) Write(b []byte) (int, error) {
