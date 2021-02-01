@@ -142,6 +142,8 @@ func relay(leftConn, rightConn net.Conn) {
 
 	go func() {
 		buf := pool.Get(pool.RelayBufferSize)
+		// Wrapping to avoid using *net.TCPConn.(ReadFrom)
+		// See also https://github.com/Dreamacro/clash/pull/1209
 		_, err := io.CopyBuffer(N.WriteOnlyWriter{Writer: leftConn}, N.ReadOnlyReader{Reader: rightConn}, buf)
 		pool.Put(buf)
 		leftConn.SetReadDeadline(time.Now())
