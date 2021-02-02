@@ -11,6 +11,10 @@ import (
 	"github.com/Dreamacro/clash/log"
 )
 
+const (
+	minInterval = time.Second * 15
+)
+
 var (
 	fileMode os.FileMode = 0666
 	dirMode  os.FileMode = 0755
@@ -130,8 +134,8 @@ func (f *fetcher) Destroy() error {
 
 func (f *fetcher) pullLoop() {
 	initialInterval := f.interval - time.Since(f.updatedAt)
-	if initialInterval <= 0 {
-		initialInterval = time.Second
+	if initialInterval < minInterval {
+		initialInterval = minInterval
 	}
 
 	timer := time.NewTimer(initialInterval)
