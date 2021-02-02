@@ -21,8 +21,8 @@ type parser = func([]byte) (interface{}, error)
 type fetcher struct {
 	name      string
 	vehicle   Vehicle
-	updatedAt *time.Time
-	ticker    *time.Ticker
+	updatedAt time.Time
+	interval  time.Duration
 	done      chan struct{}
 	hash      [16]byte
 	parser    parser
@@ -46,10 +46,11 @@ func (f *fetcher) Initial() (interface{}, error) {
 	if stat, fErr := os.Stat(f.vehicle.Path()); fErr == nil {
 		buf, err = ioutil.ReadFile(f.vehicle.Path())
 		modTime := stat.ModTime()
-		f.updatedAt = &modTime
+		f.updatedAt = modTime
 		isLocal = true
 	} else {
 		buf, err = f.vehicle.Read()
+		f.updatedAt = time.Now()
 	}
 
 	if err != nil {
@@ -83,7 +84,7 @@ func (f *fetcher) Initial() (interface{}, error) {
 	f.hash = md5.Sum(buf)
 
 	// pull proxies automatically
-	if f.ticker != nil {
+	if f.interval > 0 {
 		go f.pullLoop()
 	}
 
@@ -99,7 +100,7 @@ func (f *fetcher) Update() (interface{}, bool, error) {
 	now := time.Now()
 	hash := md5.Sum(buf)
 	if bytes.Equal(f.hash[:], hash[:]) {
-		f.updatedAt = &now
+		f.updatedAt = now
 		return nil, true, nil
 	}
 
@@ -114,23 +115,32 @@ func (f *fetcher) Update() (interface{}, bool, error) {
 		}
 	}
 
-	f.updatedAt = &now
+	f.updatedAt = now
 	f.hash = hash
 
 	return proxies, false, nil
 }
 
 func (f *fetcher) Destroy() error {
-	if f.ticker != nil {
+	if f.interval > 0 {
 		f.done <- struct{}{}
 	}
 	return nil
 }
 
 func (f *fetcher) pullLoop() {
+	initialInterval := f.interval - time.Since(f.updatedAt)
+	if initialInterval <= 0 {
+		initialInterval = time.Second
+	}
+
+	timer := time.NewTimer(initialInterval)
+
 	for {
 		select {
-		case <-f.ticker.C:
+		case <-timer.C:
+			timer.Reset(f.interval)
+
 			elm, same, err := f.Update()
 			if err != nil {
 				log.Warnln("[Provider] %s pull error: %s", f.Name(), err.Error())
@@ -147,7 +157,7 @@ func (f *fetcher) pullLoop() {
 				f.onUpdate(elm)
 			}
 		case <-f.done:
-			f.ticker.Stop()
+			timer.Stop()
 			return
 		}
 	}
@@ -166,14 +176,9 @@ func safeWrite(path string, buf []byte) error {
 }
 
 func newFetcher(name string, interval time.Duration, vehicle Vehicle, parser parser, onUpdate func(interface{})) *fetcher {
-	var ticker *time.Ticker
-	if interval != 0 {
-		ticker = time.NewTicker(interval)
-	}
-
 	return &fetcher{
 		name:     name,
-		ticker:   ticker,
+		interval: interval,
 		vehicle:  vehicle,
 		parser:   parser,
 		done:     make(chan struct{}, 1),
