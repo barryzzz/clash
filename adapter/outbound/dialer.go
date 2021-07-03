@@ -15,8 +15,10 @@ type DecorateFunc = func(conn net.Conn) (net.Conn, error)
 type DialContextFunc = func(ctx context.Context, network, address string) (net.Conn, error)
 
 func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if dial := ctx.Value(KeyDialContext); dial != nil {
-		return dial.(DialContextFunc)(ctx, network, address)
+	if value := ctx.Value(KeyDialContext); value != nil {
+		if dial, ok := value.(DialContextFunc); ok && dial != nil {
+			return dial(ctx, network, address)
+		}
 	}
 
 	switch network {
@@ -26,7 +28,7 @@ func DialContext(ctx context.Context, network, address string) (net.Conn, error)
 			return nil, err
 		}
 
-		pc, err := dialer.ListenPacket(network, address)
+		pc, err := dialer.ListenPacket(network, "")
 		if err != nil {
 			return nil, err
 		}
