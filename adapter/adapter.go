@@ -108,7 +108,8 @@ func (p *Proxy) URLTest(ctx context.Context, url string) (t uint16, err error) {
 	req = req.WithContext(ctx)
 
 	transport := &http.Transport{
-		DialContext: p.DialContext,
+		DialContext:       p.DialContext,
+		DisableKeepAlives: true,
 		// from http.DefaultTransport
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
