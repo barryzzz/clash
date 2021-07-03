@@ -120,8 +120,12 @@ func NewTrojan(option TrojanOption) (*Trojan, error) {
 			InsecureSkipVerify: tOption.SkipCertVerify,
 			ServerName:         tOption.ServerName,
 		}
+		gunConfig := &gun.Config{
+			ServiceName: option.GrpcOpts.GrpcServiceName,
+			Host:        tOption.ServerName,
+		}
 
-		g := gun.New(tlsConfig, gun.Config{ServiceName: option.GrpcOpts.GrpcServiceName, Host: tOption.ServerName})
+		g := gun.New(tlsConfig, gunConfig)
 
 		t.gun = gun.NewPool(func(ctx context.Context) (*gun.Trunk, error) {
 			conn, err := DialContext(ctx, "tcp", t.addr)

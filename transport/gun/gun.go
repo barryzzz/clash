@@ -38,7 +38,7 @@ type Config struct {
 }
 
 type Gun struct {
-	Config
+	*Config
 	transport *http2.Transport
 }
 
@@ -213,7 +213,7 @@ func (c *conn) SetWriteDeadline(t time.Time) error {
 	return c.Close()
 }
 
-func New(tlsCfg *tls.Config, cfg Config) *Gun {
+func New(tlsCfg *tls.Config, cfg *Config) *Gun {
 	return &Gun{
 		Config: cfg,
 		transport: &http2.Transport{

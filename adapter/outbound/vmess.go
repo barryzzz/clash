@@ -243,7 +243,7 @@ func NewVmess(option VmessOption) (*Vmess, error) {
 			option.HTTP2Opts.Host = append(option.HTTP2Opts.Host, "www.example.com")
 		}
 	case "grpc":
-		gunConfig := gun.Config{
+		gunConfig := &gun.Config{
 			ServiceName: v.option.GrpcOpts.GrpcServiceName,
 			Host:        v.option.ServerName,
 		}
