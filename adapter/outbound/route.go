@@ -22,10 +22,6 @@ type routePacketConn struct {
 	name   string
 }
 
-func (c *routePacketConn) RemoteAddr() net.Addr {
-	panic("implement me")
-}
-
 func (addr *RouteHopAddr) Hops() C.Hops {
 	if r, ok := addr.Addr.(C.Route); ok {
 		return append(r.Hops(), addr.name)
@@ -39,6 +35,10 @@ func (c *routeConn) LocalAddr() net.Addr {
 		Addr: c.Conn.LocalAddr(),
 		name: c.name,
 	}
+}
+
+func (c *routePacketConn) RemoteAddr() net.Addr {
+	return c.stream.RemoteAddr()
 }
 
 func (c *routePacketConn) LocalAddr() net.Addr {
