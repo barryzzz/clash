@@ -3,7 +3,7 @@ module clash-test
 go 1.16
 
 require (
-	github.com/Dreamacro/clash v1.6.1-0.20210516120541-06fdd3abe0ab
+	github.com/Dreamacro/clash v0.0.0 // local
 	github.com/Microsoft/go-winio v0.4.16 // indirect
 	github.com/containerd/containerd v1.4.4 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
@@ -24,3 +24,5 @@ require (
 	google.golang.org/grpc v1.36.0 // indirect
 	gotest.tools/v3 v3.0.3 // indirect
 )
+
+replace github.com/Dreamacro/clash => ../
