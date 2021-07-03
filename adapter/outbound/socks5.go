@@ -57,6 +57,9 @@ func (ss *Socks5) DialContext(ctx context.Context, network, address string) (net
 		if ss.tls {
 			cc := tls.Client(control, ss.tlsConfig)
 			err = cc.Handshake()
+			if err != nil {
+				return nil, err
+			}
 			control = cc
 		}
 

@@ -9,7 +9,7 @@ import (
 	"github.com/Dreamacro/clash/component/dialer"
 )
 
-const KeyDialContext = "key-dial-context"
+var KeyDialContext = struct{ string }{"key-dial-context"}
 
 type DecorateFunc = func(conn net.Conn) (net.Conn, error)
 type DialContextFunc = func(ctx context.Context, network, address string) (net.Conn, error)
