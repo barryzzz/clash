@@ -23,8 +23,10 @@ type routePacketConn struct {
 }
 
 func (addr *RouteHopAddr) Hops() C.Hops {
-	if r, ok := addr.Addr.(C.Route); ok {
-		return append(r.Hops(), addr.name)
+	if addr.Addr != nil {
+		if r, ok := addr.Addr.(C.Route); ok {
+			return append(r.Hops(), addr.name)
+		}
 	}
 
 	return append(make(C.Hops, 0, 32), addr.name)
