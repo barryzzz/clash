@@ -220,7 +220,10 @@ func New(tlsCfg *tls.Config, cfg Config) *Gun {
 			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
 				return nil, ErrClientOnly
 			},
-			TLSClientConfig: tlsCfg,
+			TLSClientConfig:    tlsCfg,
+			AllowHTTP:          false,
+			DisableCompression: true,
+			PingTimeout:        0,
 		},
 	}
 }
