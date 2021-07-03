@@ -21,7 +21,9 @@ type Relay struct {
 func (r *Relay) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	var dialContext outbound.DialContextFunc
 	for _, proxy := range r.proxies(true) {
+		proxy := proxy
 		dial := dialContext
+
 		dialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 			ctx = outbound.WithDialContext(ctx, dial)
 			return proxy.DialContext(ctx, network, address)
