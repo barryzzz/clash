@@ -6,9 +6,8 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 )
 
-type RouteAddr struct {
+type RouteHopAddr struct {
 	net.Addr
-	C.Route
 	name string
 }
 
@@ -27,31 +26,25 @@ func (c *routePacketConn) RemoteAddr() net.Addr {
 	panic("implement me")
 }
 
-func (addr *RouteAddr) Hops() C.Hops {
-	if addr.Route == nil {
-		return append(make(C.Hops, 0, 32), addr.name)
+func (addr *RouteHopAddr) Hops() C.Hops {
+	if r, ok := addr.Addr.(C.Route); ok {
+		return append(r.Hops(), addr.name)
 	}
 
-	return append(addr.Route.Hops(), addr.name)
+	return append(make(C.Hops, 0, 32), addr.name)
 }
 
 func (c *routeConn) LocalAddr() net.Addr {
-	parent, _ := c.Conn.LocalAddr().(*RouteAddr)
-
-	return &RouteAddr{
-		Addr:  c.Conn.LocalAddr(),
-		Route: parent,
-		name:  c.name,
+	return &RouteHopAddr{
+		Addr: c.Conn.LocalAddr(),
+		name: c.name,
 	}
 }
 
 func (c *routePacketConn) LocalAddr() net.Addr {
-	parent, _ := c.PacketConn.LocalAddr().(*RouteAddr)
-
-	return &RouteAddr{
-		Addr:  c.PacketConn.LocalAddr(),
-		Route: parent,
-		name:  c.name,
+	return &RouteHopAddr{
+		Addr: c.PacketConn.LocalAddr(),
+		name: c.name,
 	}
 }
 
