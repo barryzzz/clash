@@ -4,7 +4,7 @@
 package gun
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -14,15 +14,16 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
+	N "github.com/Dreamacro/clash/common/net"
 	"golang.org/x/net/http2"
 )
 
 var (
 	ErrInvalidLength = errors.New("invalid length")
-
-	ErrClientOnly = errors.New("stream client only")
+	ErrClientOnly    = errors.New("stream client only")
 )
 
 var (
@@ -30,6 +31,7 @@ var (
 		"content-type": []string{"application/grpc"},
 		"user-agent":   []string{"grpc-go/1.36.0"},
 	}
+	bufferPool = sync.Pool{New: func() interface{} { return &bytes.Buffer{} }}
 )
 
 type Config struct {
@@ -49,14 +51,12 @@ type Trunk struct {
 }
 
 type conn struct {
-	trunk       *Trunk
-	lAddr       net.Addr
-	rAddr       net.Addr
-	writer      *bufio.Writer
-	reader      *bufio.Reader
-	readCloser  io.Closer
-	writeCloser io.Closer
-	remain      int
+	lAddr    net.Addr
+	rAddr    net.Addr
+	readable sync.Mutex
+	reader   *N.BufferReadCloser
+	writer   io.WriteCloser
+	remain   int
 }
 
 func (g *Gun) NewTrunk(conn net.Conn) (*Trunk, error) {
@@ -71,7 +71,7 @@ func (g *Gun) NewTrunk(conn net.Conn) (*Trunk, error) {
 
 	conn = cc
 
-	client, err := g.transport.NewClientConn(cc)
+	client, err := g.transport.NewClientConn(conn)
 	if err != nil {
 		return nil, err
 	}
@@ -105,23 +105,27 @@ func (t *Trunk) NewConn(ctx context.Context) (net.Conn, error) {
 	}
 	request = request.WithContext(ctx)
 
-	resp, err := t.client.RoundTrip(request)
-	if err != nil {
-		t.client.Close()
-		t.conn.Close()
-
-		return nil, err
+	c := &conn{
+		lAddr:  t.conn.LocalAddr(),
+		rAddr:  t.conn.RemoteAddr(),
+		writer: writer,
 	}
 
-	return &conn{
-		trunk:       t,
-		lAddr:       t.conn.LocalAddr(),
-		rAddr:       t.conn.RemoteAddr(),
-		writer:      bufio.NewWriter(writer),
-		reader:      bufio.NewReader(resp.Body),
-		readCloser:  resp.Body,
-		writeCloser: writer,
-	}, nil
+	c.readable.Lock()
+	go func() {
+		defer c.readable.Unlock()
+
+		resp, err := t.client.RoundTrip(request)
+		if err != nil {
+			c.reader = N.NewBufferReadCloser(io.NopCloser(io.LimitReader(nil, 0)))
+
+			return
+		}
+
+		c.reader = N.NewBufferReadCloser(resp.Body)
+	}()
+
+	return c, nil
 }
 
 func (t *Trunk) Close() error {
@@ -130,6 +134,9 @@ func (t *Trunk) Close() error {
 }
 
 func (c *conn) Read(b []byte) (n int, err error) {
+	c.readable.Lock()
+	defer c.readable.Unlock()
+
 	if c.remain > 0 {
 		size := c.remain
 		if len(b) < size {
@@ -172,23 +179,28 @@ func (c *conn) Read(b []byte) (n int, err error) {
 
 func (c *conn) Write(b []byte) (int, error) {
 	protobufHeader := [binary.MaxVarintLen64 + 1]byte{0x0A}
-	variantSize := binary.PutUvarint(protobufHeader[1:], uint64(len(b)))
+	varuintSize := binary.PutUvarint(protobufHeader[1:], uint64(len(b)))
 	grpcHeader := make([]byte, 5)
-	grpcPayloadLen := uint32(variantSize + 1 + len(b))
+	grpcPayloadLen := uint32(varuintSize + 1 + len(b))
 	binary.BigEndian.PutUint32(grpcHeader[1:5], grpcPayloadLen)
 
-	buffers := net.Buffers{grpcHeader, protobufHeader[:variantSize+1], b}
-	n, err := buffers.WriteTo(c.writer)
-	if err != nil {
-		return 0, err
-	}
+	buf := bufferPool.Get().(*bytes.Buffer)
+	defer bufferPool.Put(buf)
+	defer buf.Reset()
+	buf.Write(grpcHeader)
+	buf.Write(protobufHeader[:varuintSize+1])
+	buf.Write(b)
 
-	return int(n), c.writer.Flush()
+	return c.writer.Write(buf.Bytes())
 }
 
 func (c *conn) Close() error {
-	c.readCloser.Close()
-	c.writeCloser.Close()
+	c.writer.Close()
+
+	c.readable.Lock()
+	defer c.readable.Unlock()
+
+	c.reader.Close()
 
 	return nil
 }
@@ -214,6 +226,19 @@ func (c *conn) SetWriteDeadline(t time.Time) error {
 }
 
 func New(tlsCfg *tls.Config, cfg *Config) *Gun {
+	hasHttp2 := false
+	for _, proto := range tlsCfg.NextProtos {
+		if proto == http2.NextProtoTLS {
+			hasHttp2 = true
+			break
+		}
+	}
+	if !hasHttp2 {
+		tlsCfg.NextProtos = append([]string{http2.NextProtoTLS}, tlsCfg.NextProtos...)
+	}
+	if tlsCfg.ServerName == "" {
+		tlsCfg.ServerName = cfg.ServiceName
+	}
 	return &Gun{
 		Config: cfg,
 		transport: &http2.Transport{
