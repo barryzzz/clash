@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"net"
+	"strconv"
 
 	"github.com/Dreamacro/clash/component/resolver"
 )
@@ -12,11 +13,29 @@ func resolveUDPAddr(network, address string) (*net.UDPAddr, error) {
 		return nil, err
 	}
 
-	ip, err := resolver.ResolveIP(host)
+	var ip net.IP
+	switch network {
+	case "udp":
+		ip, err = resolver.ResolveIP(host)
+	case "udp4":
+		ip, err = resolver.ResolveIPv4(host)
+	case "udp6":
+		ip, err = resolver.ResolveIPv6(host)
+	}
 	if err != nil {
 		return nil, err
 	}
-	return net.ResolveUDPAddr(network, net.JoinHostPort(ip.String(), port))
+
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		return nil, err
+	}
+
+	return &net.UDPAddr{
+		IP:   ip,
+		Port: p,
+		Zone: "",
+	}, nil
 }
 
 func safeConnClose(c net.Conn, err error) {
