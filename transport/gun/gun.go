@@ -51,12 +51,14 @@ type Trunk struct {
 }
 
 type conn struct {
-	lAddr    net.Addr
-	rAddr    net.Addr
-	readable sync.Mutex
-	reader   *N.BufferReadCloser
-	writer   io.WriteCloser
-	remain   int
+	lAddr     net.Addr
+	rAddr     net.Addr
+	readable  sync.Mutex
+	reader    *N.BufferReadCloser
+	writer    io.WriteCloser
+	remain    int
+	deadLock  sync.Mutex
+	deadTimer *time.Timer
 }
 
 func (g *Gun) NewTrunk(conn net.Conn) (*Trunk, error) {
@@ -214,15 +216,34 @@ func (c *conn) RemoteAddr() net.Addr {
 }
 
 func (c *conn) SetDeadline(t time.Time) error {
-	return c.Close()
+	c.deadLock.Lock()
+	defer c.deadLock.Unlock()
+
+	if c.deadTimer != nil {
+		c.deadTimer.Stop()
+		c.deadTimer = nil
+	}
+
+	if !t.IsZero() {
+		d := time.Until(t)
+		if d < 0 {
+			d = 0
+		}
+
+		c.deadTimer = time.AfterFunc(d, func() {
+			c.Close()
+		})
+	}
+
+	return nil
 }
 
 func (c *conn) SetReadDeadline(t time.Time) error {
-	return c.Close()
+	return c.SetDeadline(t)
 }
 
 func (c *conn) SetWriteDeadline(t time.Time) error {
-	return c.Close()
+	return c.SetDeadline(t)
 }
 
 func New(tlsCfg *tls.Config, cfg *Config) *Gun {
