@@ -4,7 +4,6 @@ import (
 	"net"
 
 	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
 )
 
 func resolveUDPAddr(network, address string) (*net.UDPAddr, error) {
