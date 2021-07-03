@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"errors"
 	"net"
 	"strconv"
 
@@ -21,6 +22,8 @@ func resolveUDPAddr(network, address string) (*net.UDPAddr, error) {
 		ip, err = resolver.ResolveIPv4(host)
 	case "udp6":
 		ip, err = resolver.ResolveIPv6(host)
+	default:
+		err = errors.New("invalid network")
 	}
 	if err != nil {
 		return nil, err
