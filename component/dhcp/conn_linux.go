@@ -196,6 +196,9 @@ func ListenDHCPClient(ifaceName string) (net.PacketConn, error) {
 	}
 
 	rawConn, err := ipv4.NewRawConn(conn)
+	if err != nil {
+		return nil, err
+	}
 
 	return &udpPacketConn{
 		rawConn:   rawConn,
