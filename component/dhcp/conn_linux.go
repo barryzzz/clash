@@ -73,11 +73,8 @@ func (p udpPacket) Valid(sourceAddr, targetAddr net.IP) bool {
 	s += uint32(p.Length())
 
 	c := Checksum(s, p[:p.Length()])
-	if c != b {
-		return false
-	}
 
-	return true
+	return c == b
 }
 
 func (p udpPacket) Verify(sourceAddr, targetAddr net.IP) {
