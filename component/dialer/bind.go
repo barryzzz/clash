@@ -77,9 +77,10 @@ func fallbackBindToListenConfig(name string) (string, error) {
 		return "", err
 	}
 
-	for _, addr := range iface.Addrs {
-		return net.JoinHostPort(addr.IP.String(), "0"), nil
+	addr, err := IF.PickIPv4Addr(iface.Addrs)
+	if err != nil {
+		return "", err
 	}
 
-	return "", ErrAddrNotFound
+	return net.JoinHostPort(addr.IP.String(), "0"), nil
 }
