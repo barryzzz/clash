@@ -10,6 +10,7 @@ import (
 	"github.com/Dreamacro/clash/adapter/outboundgroup"
 	"github.com/Dreamacro/clash/component/auth"
 	"github.com/Dreamacro/clash/component/dialer"
+	"github.com/Dreamacro/clash/component/iface"
 	"github.com/Dreamacro/clash/component/profile"
 	"github.com/Dreamacro/clash/component/profile/cachefile"
 	"github.com/Dreamacro/clash/component/resolver"
@@ -176,6 +177,8 @@ func updateGeneral(general *config.General, force bool) {
 		dialer.DialHook = nil
 		dialer.ListenPacketHook = nil
 	}
+
+	iface.FlushCache()
 
 	if !force {
 		return
