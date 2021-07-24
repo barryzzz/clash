@@ -3,6 +3,8 @@ package dialer
 import (
 	"net"
 	"syscall"
+
+	"github.com/Dreamacro/clash/component/iface"
 )
 
 type controlFn = func(network, address string, c syscall.RawConn) error
@@ -29,25 +31,21 @@ func bindControl(ifaceIdx int) controlFn {
 }
 
 func bindIfaceToDialer(dialer *net.Dialer, ifaceName string) error {
-	iface, err, _ := ifaceSingle.Do(func() (interface{}, error) {
-		return net.InterfaceByName(ifaceName)
-	})
+	ifaceObj, err := iface.ResolveInterface(ifaceName)
 	if err != nil {
 		return err
 	}
 
-	dialer.Control = bindControl(iface.(*net.Interface).Index)
+	dialer.Control = bindControl(ifaceObj.Index)
 	return nil
 }
 
 func bindIfaceToListenConfig(lc *net.ListenConfig, ifaceName string) error {
-	iface, err, _ := ifaceSingle.Do(func() (interface{}, error) {
-		return net.InterfaceByName(ifaceName)
-	})
+	ifaceObj, err := iface.ResolveInterface(ifaceName)
 	if err != nil {
 		return err
 	}
 
-	lc.Control = bindControl(iface.(*net.Interface).Index)
+	lc.Control = bindControl(ifaceObj.Index)
 	return nil
 }
