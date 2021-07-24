@@ -114,6 +114,6 @@ func newDHCPClient(ifaceName string) *dhcpClient {
 			UDPSize: D.MinMsgSize,
 		},
 		ifaceName: ifaceName,
-		dnsAddr:   singledo.NewSingle(time.Second * 30),
+		dnsAddr:   singledo.NewSingle(time.Second * 20),
 	}
 }
