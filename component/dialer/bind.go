@@ -3,58 +3,44 @@ package dialer
 import (
 	"errors"
 	"net"
-	"time"
 
-	"github.com/Dreamacro/clash/common/singledo"
+	IF "github.com/Dreamacro/clash/component/iface"
 )
-
-// In some OS, such as Windows, it takes a little longer to get interface information
-var ifaceSingle = singledo.NewSingle(time.Second * 20)
 
 var (
 	errPlatformNotSupport = errors.New("unsupport platform")
 )
 
-func lookupTCPAddr(ip net.IP, addrs []net.Addr) (*net.TCPAddr, error) {
-	ipv4 := ip.To4() != nil
+func lookupTCPAddr(ip net.IP, addrs []*net.IPNet) (*net.TCPAddr, error) {
+	var addr *net.IPNet
+	var err error
 
-	for _, elm := range addrs {
-		addr, ok := elm.(*net.IPNet)
-		if !ok {
-			continue
-		}
-
-		addrV4 := addr.IP.To4() != nil
-
-		if addrV4 && ipv4 {
-			return &net.TCPAddr{IP: addr.IP, Port: 0}, nil
-		} else if !addrV4 && !ipv4 {
-			return &net.TCPAddr{IP: addr.IP, Port: 0}, nil
-		}
+	if ip.To4() != nil {
+		addr, err = IF.PickIPv4Addr(addrs)
+	} else {
+		addr, err = IF.PickIPv6Addr(addrs)
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, ErrAddrNotFound
+	return &net.TCPAddr{IP: addr.IP, Port: 0}, nil
 }
 
-func lookupUDPAddr(ip net.IP, addrs []net.Addr) (*net.UDPAddr, error) {
-	ipv4 := ip.To4() != nil
+func lookupUDPAddr(ip net.IP, addrs []*net.IPNet) (*net.UDPAddr, error) {
+	var addr *net.IPNet
+	var err error
 
-	for _, elm := range addrs {
-		addr, ok := elm.(*net.IPNet)
-		if !ok {
-			continue
-		}
-
-		addrV4 := addr.IP.To4() != nil
-
-		if addrV4 && ipv4 {
-			return &net.UDPAddr{IP: addr.IP, Port: 0}, nil
-		} else if !addrV4 && !ipv4 {
-			return &net.UDPAddr{IP: addr.IP, Port: 0}, nil
-		}
+	if ip.To4() != nil {
+		addr, err = IF.PickIPv4Addr(addrs)
+	} else {
+		addr, err = IF.PickIPv6Addr(addrs)
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, ErrAddrNotFound
+	return &net.UDPAddr{IP: addr.IP, Port: 0}, nil
 }
 
 func fallbackBindToDialer(dialer *net.Dialer, network string, ip net.IP, name string) error {
@@ -62,27 +48,20 @@ func fallbackBindToDialer(dialer *net.Dialer, network string, ip net.IP, name st
 		return nil
 	}
 
-	iface, err, _ := ifaceSingle.Do(func() (interface{}, error) {
-		return net.InterfaceByName(name)
-	})
-	if err != nil {
-		return err
-	}
-
-	addrs, err := iface.(*net.Interface).Addrs()
+	iface, err := IF.ResolveInterface(name)
 	if err != nil {
 		return err
 	}
 
 	switch network {
 	case "tcp", "tcp4", "tcp6":
-		if addr, err := lookupTCPAddr(ip, addrs); err == nil {
+		if addr, err := lookupTCPAddr(ip, iface.Addrs); err == nil {
 			dialer.LocalAddr = addr
 		} else {
 			return err
 		}
 	case "udp", "udp4", "udp6":
-		if addr, err := lookupUDPAddr(ip, addrs); err == nil {
+		if addr, err := lookupUDPAddr(ip, iface.Addrs); err == nil {
 			dialer.LocalAddr = addr
 		} else {
 			return err
@@ -93,24 +72,12 @@ func fallbackBindToDialer(dialer *net.Dialer, network string, ip net.IP, name st
 }
 
 func fallbackBindToListenConfig(name string) (string, error) {
-	iface, err, _ := ifaceSingle.Do(func() (interface{}, error) {
-		return net.InterfaceByName(name)
-	})
+	iface, err := IF.ResolveInterface(name)
 	if err != nil {
 		return "", err
 	}
 
-	addrs, err := iface.(*net.Interface).Addrs()
-	if err != nil {
-		return "", err
-	}
-
-	for _, elm := range addrs {
-		addr, ok := elm.(*net.IPNet)
-		if !ok || addr.IP.To4() == nil {
-			continue
-		}
-
+	for _, addr := range iface.Addrs {
 		return net.JoinHostPort(addr.IP.String(), "0"), nil
 	}
 

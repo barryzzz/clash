@@ -24,6 +24,10 @@ func Dial(network, address string) (net.Conn, error) {
 }
 
 func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return DialContextWithHook(DialerHook, DialHook, ctx, network, address)
+}
+
+func DialContextWithHook(dialerHook DialerHookFunc, dialHook DialHookFunc, ctx context.Context, network, address string) (net.Conn, error) {
 	switch network {
 	case "tcp4", "tcp6", "udp4", "udp6":
 		host, port, err := net.SplitHostPort(address)
@@ -31,9 +35,11 @@ func DialContext(ctx context.Context, network, address string) (net.Conn, error)
 			return nil, err
 		}
 
-		dialer, err := Dialer()
-		if err != nil {
-			return nil, err
+		dialer := &net.Dialer{}
+		if dialerHook != nil {
+			if err := dialerHook(dialer); err != nil {
+				return nil, err
+			}
 		}
 
 		var ip net.IP
@@ -48,24 +54,28 @@ func DialContext(ctx context.Context, network, address string) (net.Conn, error)
 			return nil, err
 		}
 
-		if DialHook != nil {
-			if err := DialHook(dialer, network, ip); err != nil {
+		if dialHook != nil {
+			if err := dialHook(dialer, network, ip); err != nil {
 				return nil, err
 			}
 		}
 		return dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
 	case "tcp", "udp":
-		return dualStackDialContext(ctx, network, address)
+		return dualStackDialContextWithHook(dialerHook, dialHook, ctx, network, address)
 	default:
 		return nil, errors.New("network invalid")
 	}
 }
 
 func ListenPacket(network, address string) (net.PacketConn, error) {
+	return ListenPacketWithHook(ListenPacketHook, network, address)
+}
+
+func ListenPacketWithHook(hook ListenPacketHookFunc, network, address string) (net.PacketConn, error) {
 	cfg := &net.ListenConfig{}
-	if ListenPacketHook != nil {
+	if hook != nil {
 		var err error
-		address, err = ListenPacketHook(cfg, address)
+		address, err = hook(cfg, address)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +84,7 @@ func ListenPacket(network, address string) (net.PacketConn, error) {
 	return cfg.ListenPacket(context.Background(), network, address)
 }
 
-func dualStackDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+func dualStackDialContextWithHook(dialerHook DialerHookFunc, dialHook DialHookFunc, ctx context.Context, network, address string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -105,10 +115,12 @@ func dualStackDialContext(ctx context.Context, network, address string) (net.Con
 			}
 		}()
 
-		dialer, err := Dialer()
-		if err != nil {
-			result.error = err
-			return
+		dialer := &net.Dialer{}
+		if DialerHook != nil {
+			if err := dialerHook(dialer); err != nil {
+				result.error = err
+				return
+			}
 		}
 
 		var ip net.IP
@@ -122,8 +134,8 @@ func dualStackDialContext(ctx context.Context, network, address string) (net.Con
 		}
 		result.resolved = true
 
-		if DialHook != nil {
-			if result.error = DialHook(dialer, network, ip); result.error != nil {
+		if dialHook != nil {
+			if result.error = dialHook(dialer, network, ip); result.error != nil {
 				return
 			}
 		}
