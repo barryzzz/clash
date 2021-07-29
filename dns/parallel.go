@@ -18,7 +18,7 @@ type parallel struct {
 }
 
 func (p *parallel) ExchangeContext(ctx context.Context, msg *DM.Message) (*DM.Message, error) {
-	fast, ctx := picker.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
+	fast, ctx := picker.WithTimeout(ctx, resolver.DefaultDNSTimeout)
 	for _, client := range p.upstreams {
 		c := client
 		fast.Go(func() (interface{}, error) {
