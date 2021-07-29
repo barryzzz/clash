@@ -48,7 +48,6 @@ func (h *hosts) ExchangeContext(ctx context.Context, msg *DM.Message) (*DM.Messa
 			Header: DM.Header{
 				ID:                 msg.ID,
 				Response:           true,
-				Authoritative:      false,
 				RecursionAvailable: true,
 				RCode:              DM.RCodeSuccess,
 			},
@@ -62,8 +61,6 @@ func (h *hosts) ExchangeContext(ctx context.Context, msg *DM.Message) (*DM.Messa
 				},
 				Body: resourceBody,
 			}},
-			Authorities: nil,
-			Additionals: nil,
 		}, nil
 	}
 
