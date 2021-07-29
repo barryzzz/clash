@@ -12,7 +12,7 @@ import (
 var ErrNotResponding = errors.New("DHCP not responding")
 var ErrNotFound = errors.New("DNS option not found")
 
-func ResolveDNSFromDHCP(context context.Context, ifaceName string) (net.IP, error) {
+func ResolveDNSFromDHCP(context context.Context, ifaceName string) ([]net.IP, error) {
 	iface, err := IF.ResolveInterface(ifaceName)
 	if err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func ResolveDNSFromDHCP(context context.Context, ifaceName string) (net.IP, erro
 	}
 	defer conn.Close()
 
-	result := make(chan net.IP, 1)
+	result := make(chan []net.IP, 1)
 
 	addr, err := IF.PickIPv4Addr(iface.Addrs)
 	if err != nil {
@@ -54,7 +54,7 @@ func ResolveDNSFromDHCP(context context.Context, ifaceName string) (net.IP, erro
 	}
 }
 
-func receiveAck(conn net.PacketConn, id dhcpv4.TransactionID, result chan<- net.IP) {
+func receiveAck(conn net.PacketConn, id dhcpv4.TransactionID, result chan<- []net.IP) {
 	defer close(result)
 
 	buf := make([]byte, dhcpv4.MaxMessageSize)
@@ -83,7 +83,7 @@ func receiveAck(conn net.PacketConn, id dhcpv4.TransactionID, result chan<- net.
 			return
 		}
 
-		result <- dns[0]
+		result <- dns
 
 		return
 	}

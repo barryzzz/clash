@@ -2,159 +2,122 @@ package dns
 
 import (
 	"net"
-	"strings"
 	"time"
 
+	DM "golang.org/x/net/dns/dnsmessage"
+
 	"github.com/Dreamacro/clash/common/cache"
+	"github.com/Dreamacro/clash/component/dns"
 	"github.com/Dreamacro/clash/component/fakeip"
-	"github.com/Dreamacro/clash/component/trie"
 	"github.com/Dreamacro/clash/context"
 	"github.com/Dreamacro/clash/log"
-
-	D "github.com/miekg/dns"
 )
 
-type handler func(ctx *context.DNSContext, r *D.Msg) (*D.Msg, error)
+type handler func(ctx *context.DNSContext, msg *DM.Message) (*DM.Message, error)
 type middleware func(next handler) handler
-
-func withHosts(hosts *trie.DomainTrie) middleware {
-	return func(next handler) handler {
-		return func(ctx *context.DNSContext, r *D.Msg) (*D.Msg, error) {
-			q := r.Question[0]
-
-			if !isIPRequest(q) {
-				return next(ctx, r)
-			}
-
-			record := hosts.Search(strings.TrimRight(q.Name, "."))
-			if record == nil {
-				return next(ctx, r)
-			}
-
-			ip := record.Data.(net.IP)
-			msg := r.Copy()
-
-			if v4 := ip.To4(); v4 != nil && q.Qtype == D.TypeA {
-				rr := &D.A{}
-				rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeA, Class: D.ClassINET, Ttl: dnsDefaultTTL}
-				rr.A = v4
-
-				msg.Answer = []D.RR{rr}
-			} else if v6 := ip.To16(); v6 != nil && q.Qtype == D.TypeAAAA {
-				rr := &D.AAAA{}
-				rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeAAAA, Class: D.ClassINET, Ttl: dnsDefaultTTL}
-				rr.AAAA = v6
-
-				msg.Answer = []D.RR{rr}
-			} else {
-				return next(ctx, r)
-			}
-
-			ctx.SetType(context.DNSTypeHost)
-			msg.SetRcode(r, D.RcodeSuccess)
-			msg.Authoritative = true
-			msg.RecursionAvailable = true
-
-			return msg, nil
-		}
-	}
-}
 
 func withMapping(mapping *cache.LruCache) middleware {
 	return func(next handler) handler {
-		return func(ctx *context.DNSContext, r *D.Msg) (*D.Msg, error) {
-			q := r.Question[0]
-
-			if !isIPRequest(q) {
-				return next(ctx, r)
+		return func(ctx *context.DNSContext, msg *DM.Message) (*DM.Message, error) {
+			if !dns.IsIPRequest(msg) {
+				return next(ctx, msg)
 			}
 
-			msg, err := next(ctx, r)
+			q := msg.Questions[0]
+
+			reply, err := next(ctx, msg)
 			if err != nil {
 				return nil, err
 			}
 
-			host := strings.TrimRight(q.Name, ".")
+			host := dns.TrimFqdn(q.Name.String())
 
-			for _, ans := range msg.Answer {
+			for _, ans := range reply.Answers {
 				var ip net.IP
-				var ttl uint32
 
-				switch a := ans.(type) {
-				case *D.A:
-					ip = a.A
-					ttl = a.Hdr.Ttl
-				case *D.AAAA:
-					ip = a.AAAA
-					ttl = a.Hdr.Ttl
+				switch a := ans.Body.(type) {
+				case *DM.AResource:
+					ip = a.A[:]
+				case *DM.AAAAResource:
+					ip = a.AAAA[:]
 				default:
 					continue
 				}
 
-				mapping.SetWithExpire(ip.String(), host, time.Now().Add(time.Second*time.Duration(ttl)))
+				mapping.SetWithExpire(ip.String(), host, time.Now().Add(time.Second*time.Duration(ans.Header.TTL)))
 			}
 
-			return msg, nil
+			return reply, nil
 		}
 	}
 }
 
 func withFakeIP(fakePool *fakeip.Pool) middleware {
 	return func(next handler) handler {
-		return func(ctx *context.DNSContext, r *D.Msg) (*D.Msg, error) {
-			q := r.Question[0]
+		return func(ctx *context.DNSContext, msg *DM.Message) (*DM.Message, error) {
+			if !dns.IsIPRequest(msg) {
+				return next(ctx, msg)
+			}
 
-			host := strings.TrimRight(q.Name, ".")
+			q := msg.Questions[0]
+
+			host := dns.TrimFqdn(q.Name.String())
 			if fakePool.LookupHost(host) {
-				return next(ctx, r)
+				return next(ctx, msg)
 			}
 
-			switch q.Qtype {
-			case D.TypeAAAA, D.TypeSVCB, D.TypeHTTPS:
-				return handleMsgWithEmptyAnswer(r), nil
+			switch q.Type {
+			case DM.TypeAAAA, dns.TypeSVCB, dns.TypeHTTPS:
+				return dns.ReplyWithEmptyAnswer(msg), nil
 			}
 
-			if q.Qtype != D.TypeA {
-				return next(ctx, r)
+			if q.Type != DM.TypeA {
+				return next(ctx, msg)
 			}
-
-			rr := &D.A{}
-			rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeA, Class: D.ClassINET, Ttl: dnsDefaultTTL}
-			ip := fakePool.Lookup(host)
-			rr.A = ip
-			msg := r.Copy()
-			msg.Answer = []D.RR{rr}
 
 			ctx.SetType(context.DNSTypeFakeIP)
-			setMsgTTL(msg, 1)
-			msg.SetRcode(r, D.RcodeSuccess)
-			msg.Authoritative = true
-			msg.RecursionAvailable = true
 
-			return msg, nil
+			ip := fakePool.Lookup(host)
+			resourceBody := &DM.AResource{}
+			copy(resourceBody.A[:], ip.To4())
+
+			return &DM.Message{
+				Header: DM.Header{
+					ID:                 msg.ID,
+					Response:           true,
+					RecursionAvailable: true,
+					RCode:              DM.RCodeSuccess,
+				},
+				Questions: msg.Questions,
+				Answers: []DM.Resource{{
+					Header: DM.ResourceHeader{
+						Name:  q.Name,
+						Type:  DM.TypeA,
+						Class: DM.ClassINET,
+						TTL:   1,
+					},
+					Body: resourceBody,
+				}},
+			}, nil
 		}
 	}
 }
 
 func withResolver(resolver *Resolver) handler {
-	return func(ctx *context.DNSContext, r *D.Msg) (*D.Msg, error) {
+	return func(ctx *context.DNSContext, msg *DM.Message) (*DM.Message, error) {
 		ctx.SetType(context.DNSTypeRaw)
-		q := r.Question[0]
 
-		// return a empty AAAA msg when ipv6 disabled
-		if !resolver.ipv6 && q.Qtype == D.TypeAAAA {
-			return handleMsgWithEmptyAnswer(r), nil
-		}
-
-		msg, err := resolver.Exchange(r)
+		reply, err := resolver.Exchange(msg)
 		if err != nil {
-			log.Debugln("[DNS Server] Exchange %s failed: %v", q.String(), err)
-			return msg, err
-		}
-		msg.SetRcode(r, msg.Rcode)
-		msg.Authoritative = true
+			if len(msg.Questions) != 0 {
+				log.Debugln("[DNS Server] Exchange %s failed: %v", msg.Questions[0].GoString(), err)
+			}
 
-		return msg, nil
+			return reply, err
+		}
+		msg.RecursionAvailable = true
+
+		return reply, nil
 	}
 }
 
@@ -171,10 +134,6 @@ func compose(middlewares []middleware, endpoint handler) handler {
 
 func newHandler(resolver *Resolver, mapper *ResolverEnhancer) handler {
 	middlewares := []middleware{}
-
-	if resolver.hosts != nil {
-		middlewares = append(middlewares, withHosts(resolver.hosts))
-	}
 
 	if mapper.mode == FAKEIP {
 		middlewares = append(middlewares, withFakeIP(mapper.fakePool))

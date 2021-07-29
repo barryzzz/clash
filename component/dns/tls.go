@@ -1,4 +1,4 @@
-package libdns
+package dns
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 )
 
 type TLSTransport struct {
-	Config  *tls.Config
+	Config *tls.Config
 
-	DialContext func(ctx context.Context, network, address string) (net.Conn, error)
+	DialContext DialContextFunc
 }
 
 func (t *TLSTransport) RoundTrip(ctx context.Context, msg *dnsmessage.Message, address string) (*dnsmessage.Message, error) {

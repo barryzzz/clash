@@ -2,7 +2,7 @@ package context
 
 import (
 	"github.com/gofrs/uuid"
-	"github.com/miekg/dns"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 const (
@@ -13,11 +13,11 @@ const (
 
 type DNSContext struct {
 	id  uuid.UUID
-	msg *dns.Msg
+	msg *dnsmessage.Message
 	tp  string
 }
 
-func NewDNSContext(msg *dns.Msg) *DNSContext {
+func NewDNSContext(msg *dnsmessage.Message) *DNSContext {
 	id, _ := uuid.NewV4()
 	return &DNSContext{
 		id:  id,

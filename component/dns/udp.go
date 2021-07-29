@@ -1,4 +1,4 @@
-package libdns
+package dns
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 const LargeUDPDNSMessageSize = 1332
 
 type UDPTransport struct {
-	DialContext func(ctx context.Context, network, address string) (net.Conn, error)
+	DialContext DialContextFunc
 }
 
 func (t *UDPTransport) RoundTrip(ctx context.Context, msg *dnsmessage.Message, address string) (*dnsmessage.Message, error) {

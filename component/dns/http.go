@@ -1,4 +1,4 @@
-package libdns
+package dns
 
 import (
 	"bytes"

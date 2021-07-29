@@ -1,10 +1,13 @@
-package libdns
+package dns
 
 import (
 	"context"
+	"net"
 
 	"golang.org/x/net/dns/dnsmessage"
 )
+
+type DialContextFunc = func(ctx context.Context, network, address string) (net.Conn, error)
 
 type RoundTripper interface {
 	RoundTrip(ctx context.Context, msg *dnsmessage.Message, address string) (*dnsmessage.Message, error)

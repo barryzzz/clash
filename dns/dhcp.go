@@ -4,38 +4,30 @@ import (
 	"bytes"
 	"context"
 	"net"
-	"time"
+
+	"golang.org/x/net/dns/dnsmessage"
 
 	"github.com/Dreamacro/clash/common/singledo"
-	"github.com/Dreamacro/clash/component/dhcp"
+	DH "github.com/Dreamacro/clash/component/dhcp"
 	"github.com/Dreamacro/clash/component/dialer"
+	D "github.com/Dreamacro/clash/component/dns"
 	IF "github.com/Dreamacro/clash/component/iface"
-	"github.com/Dreamacro/clash/component/resolver"
-	D "github.com/miekg/dns"
 )
 
-const defaultCacheTTL = 60
+const dhcpDefaultTTL = 60
 
-type dhcpClient struct {
-	*D.Client
+type dhcp struct {
+	parallel
 
 	ifaceName string
-	dnsAddr   *singledo.Single
+	singleDo  *singledo.Single
 
-	cacheDNS  net.IP
-	cacheAddr *net.IPNet
-	cacheTTL  int
+	statusTTL  int
+	statusAddr *net.IPNet
 }
 
-func (d *dhcpClient) Exchange(m *D.Msg) (msg *D.Msg, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
-	defer cancel()
-
-	return d.ExchangeContext(ctx, m)
-}
-
-func (d *dhcpClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
-	value, err, _ := d.dnsAddr.Do(func() (interface{}, error) {
+func (d *dhcp) ExchangeContext(ctx context.Context, msg *dnsmessage.Message) (*dnsmessage.Message, error) {
+	_, err, _ := d.singleDo.Do(func() (interface{}, error) {
 		iface, err := IF.ResolveInterface(d.ifaceName)
 		if err != nil {
 			return nil, err
@@ -46,74 +38,39 @@ func (d *dhcpClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg,
 			return nil, err
 		}
 
-		if d.cacheTTL > 0 && d.cacheAddr.IP.Equal(addr.IP) && bytes.Equal(d.cacheAddr.Mask, addr.Mask) {
-			d.cacheTTL--
+		if d.statusTTL > 0 && d.statusAddr.IP.Equal(addr.IP) && bytes.Equal(d.statusAddr.Mask, addr.Mask) {
+			d.statusTTL--
 
-			return d.cacheDNS, nil
+			return nil, nil
 		}
 
-		dns, err := dhcp.ResolveDNSFromDHCP(ctx, iface.Name)
+		dns, err := DH.ResolveDNSFromDHCP(ctx, iface.Name)
 		if err != nil {
 			return nil, err
 		}
 
-		d.cacheTTL = defaultCacheTTL
-		d.cacheDNS = dns
-		d.cacheAddr = addr
+		var groups []upstream
 
-		return dns, nil
+		for _, ip := range dns {
+			groups = append(groups, &client{
+				Client: &D.Client{
+					Transport: &D.UDPTransport{DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+						return dialer.DialContextWithHook(nil, dialer.DialerWithInterface(d.ifaceName), ctx, network, address)
+					}},
+				},
+				address: net.JoinHostPort(ip.String(), "53"),
+			})
+		}
+
+		d.upstreams = groups
+		d.statusAddr = addr
+		d.statusTTL = dhcpDefaultTTL
+
+		return nil, nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	dns := value.(net.IP)
-
-	conn, err := dialer.DialContextWithHook(nil, dialer.DialerWithInterface(d.ifaceName), ctx, "udp", net.JoinHostPort(dns.String(), "53"))
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	r := make(chan *D.Msg, 1)
-	e := make(chan error, 1)
-
-	go d.exchangeWithConn(conn, m, r, e)
-
-	select {
-	case r := <-r:
-		return r, nil
-	case e := <-e:
-		return nil, e
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-func (d *dhcpClient) exchangeWithConn(conn net.Conn, m *D.Msg, r chan<- *D.Msg, e chan<- error) {
-	defer conn.Close()
-
-	m, _, err := d.Client.ExchangeWithConn(m, &D.Conn{
-		Conn:         conn,
-		UDPSize:      D.MinMsgSize,
-		TsigSecret:   nil,
-		TsigProvider: nil,
-	})
-	if err != nil {
-		e <- err
-		return
-	}
-
-	r <- m
-}
-
-func newDHCPClient(ifaceName string) *dhcpClient {
-	return &dhcpClient{
-		Client: &D.Client{
-			Net:     "udp",
-			UDPSize: D.MinMsgSize,
-		},
-		ifaceName: ifaceName,
-		dnsAddr:   singledo.NewSingle(time.Second * 20),
-	}
+	return d.parallel.ExchangeContext(ctx, msg)
 }

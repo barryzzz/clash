@@ -1,4 +1,4 @@
-package libdns
+package dns
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 )
 
 type TCPTransport struct {
-	DialContext func(ctx context.Context, network, address string) (net.Conn, error)
+	DialContext DialContextFunc
 }
 
 func (t *TCPTransport) RoundTrip(ctx context.Context, msg *dnsmessage.Message, address string) (*dnsmessage.Message, error) {

@@ -7,40 +7,43 @@ import (
 	"github.com/Dreamacro/clash/component/trie"
 )
 
-type fallbackIPFilter interface {
-	Match(net.IP) bool
+type filter interface {
+	Match(domain string, ip net.IP) bool
 }
 
 type geoipFilter struct{}
 
-func (gf *geoipFilter) Match(ip net.IP) bool {
+type ipcidrFilter struct {
+	ipNets []*net.IPNet
+}
+
+type domainFilter struct {
+	domains *trie.DomainTrie
+}
+
+func (gf *geoipFilter) Match(_ string, ip net.IP) bool {
 	record, _ := mmdb.Instance().Country(ip)
 	return record.Country.IsoCode != "CN" && record.Country.IsoCode != ""
 }
 
-type ipnetFilter struct {
-	ipnet *net.IPNet
-}
-
-func (inf *ipnetFilter) Match(ip net.IP) bool {
-	return inf.ipnet.Contains(ip)
-}
-
-type fallbackDomainFilter interface {
-	Match(domain string) bool
-}
-type domainFilter struct {
-	tree *trie.DomainTrie
-}
-
-func NewDomainFilter(domains []string) *domainFilter {
-	df := domainFilter{tree: trie.New()}
-	for _, domain := range domains {
-		df.tree.Insert(domain, "")
+func (inf *ipcidrFilter) Match(_ string, ip net.IP) bool {
+	if ip == nil {
+		return false
 	}
-	return &df
+
+	for _, n := range inf.ipNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+
+	return false
 }
 
-func (df *domainFilter) Match(domain string) bool {
-	return df.tree.Search(domain) != nil
+func (df *domainFilter) Match(domain string, _ net.IP) bool {
+	if domain == "" {
+		return false
+	}
+
+	return df.domains.Search(domain) != nil
 }
