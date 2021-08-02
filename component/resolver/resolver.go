@@ -40,10 +40,16 @@ type Resolver interface {
 
 // ResolveIPv4 with a host, return ipv4
 func ResolveIPv4(host string) (net.IP, error) {
-	if node := DefaultHosts.Search(host); node != nil {
-		if ip := node.Data.(net.IP).To4(); ip != nil {
+	if r := DefaultResolver; r != nil {
+		return r.ResolveIPv4(host)
+	}
+
+	if ip := LookupHosts(host); ip != nil {
+		if ip = ip.To4(); ip != nil {
 			return ip, nil
 		}
+
+		return nil, ErrIPVersion
 	}
 
 	ip := net.ParseIP(host)
@@ -52,10 +58,6 @@ func ResolveIPv4(host string) (net.IP, error) {
 			return ip, nil
 		}
 		return nil, ErrIPVersion
-	}
-
-	if DefaultResolver != nil {
-		return DefaultResolver.ResolveIPv4(host)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDNSTimeout)
@@ -76,10 +78,20 @@ func ResolveIPv6(host string) (net.IP, error) {
 		return nil, ErrIPv6Disabled
 	}
 
+	if ip := LookupHosts(host); ip != nil {
+		if ip = ip.To16(); ip != nil {
+			return ip, nil
+		}
+
+		return nil, ErrIPVersion
+	}
+
 	if node := DefaultHosts.Search(host); node != nil {
 		if ip := node.Data.(net.IP).To16(); ip != nil {
 			return ip, nil
 		}
+
+		return nil, ErrIPVersion
 	}
 
 	ip := net.ParseIP(host)
@@ -88,10 +100,6 @@ func ResolveIPv6(host string) (net.IP, error) {
 			return ip, nil
 		}
 		return nil, ErrIPVersion
-	}
-
-	if DefaultResolver != nil {
-		return DefaultResolver.ResolveIPv6(host)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDNSTimeout)
@@ -106,19 +114,21 @@ func ResolveIPv6(host string) (net.IP, error) {
 	return ipAddrs[rand.Intn(len(ipAddrs))], nil
 }
 
-// ResolveIPWithResolver same as ResolveIP, but with a resolver
-func ResolveIPWithResolver(host string, r Resolver) (net.IP, error) {
-	if node := DefaultHosts.Search(host); node != nil {
-		return node.Data.(net.IP), nil
-	}
-
-	if r != nil {
+// ResolveIP with a host, return ip
+func ResolveIP(host string) (net.IP, error) {
+	if r := DefaultResolver; r != nil {
 		if DisableIPv6 {
 			return r.ResolveIPv4(host)
 		}
 		return r.ResolveIP(host)
-	} else if DisableIPv6 {
+	}
+
+	if DisableIPv6 {
 		return ResolveIPv4(host)
+	}
+
+	if node := DefaultHosts.Search(host); node != nil {
+		return node.Data.(net.IP), nil
 	}
 
 	ip := net.ParseIP(host)
@@ -134,7 +144,12 @@ func ResolveIPWithResolver(host string, r Resolver) (net.IP, error) {
 	return ipAddr.IP, nil
 }
 
-// ResolveIP with a host, return ip
-func ResolveIP(host string) (net.IP, error) {
-	return ResolveIPWithResolver(host, DefaultResolver)
+// LookupHosts return ip with host from DefaultHosts
+func LookupHosts(host string) net.IP {
+	node := DefaultHosts.Search(host)
+	if node == nil {
+		return nil
+	}
+
+	return node.Data.(net.IP)
 }

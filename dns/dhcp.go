@@ -61,6 +61,9 @@ func (d *dhcp) ExchangeContext(ctx context.Context, msg *dnsmessage.Message) (*d
 				address: net.JoinHostPort(ip.String(), "53"),
 			})
 		}
+		if len(modules) == 0 {
+			return nil, DH.ErrNotFound
+		}
 
 		d.modules = modules
 		d.statusAddr = addr

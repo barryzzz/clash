@@ -112,7 +112,7 @@ func updateDNS(c *config.DNS) {
 	if !c.Enable {
 		resolver.DefaultResolver = nil
 		resolver.DefaultHostMapper = nil
-		dns.ReCreateServer("", nil, nil)
+		dns.ReCreateServer("", nil, nil, nil)
 		return
 	}
 
@@ -143,7 +143,7 @@ func updateDNS(c *config.DNS) {
 	resolver.DefaultResolver = r
 	resolver.DefaultHostMapper = m
 
-	if err := dns.ReCreateServer(c.Listen, r, m); err != nil {
+	if err := dns.ReCreateServer(c.Listen, r, m, cfg.Hosts); err != nil {
 		log.Errorln("Start DNS server error: %s", err.Error())
 		return
 	}

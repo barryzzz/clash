@@ -8,6 +8,7 @@ import (
 	"github.com/Dreamacro/clash/common/sockopt"
 	D "github.com/Dreamacro/clash/component/dns"
 	R "github.com/Dreamacro/clash/component/resolver"
+	"github.com/Dreamacro/clash/component/trie"
 	"github.com/Dreamacro/clash/context"
 	"github.com/Dreamacro/clash/log"
 )
@@ -61,9 +62,9 @@ func (s *Server) setHandler(handler handler) {
 	s.handler = handler
 }
 
-func ReCreateServer(addr string, resolver *Resolver, mapper *ResolverEnhancer) error {
+func ReCreateServer(addr string, resolver *Resolver, mapper *ResolverEnhancer, hosts *trie.DomainTrie) error {
 	if addr == address && resolver != nil {
-		handler := newHandler(resolver, mapper)
+		handler := newHandler(resolver, mapper, hosts)
 		server.setHandler(handler)
 		return nil
 	}
@@ -95,7 +96,7 @@ func ReCreateServer(addr string, resolver *Resolver, mapper *ResolverEnhancer) e
 	}
 
 	address = addr
-	handler := newHandler(resolver, mapper)
+	handler := newHandler(resolver, mapper, hosts)
 	server = &Server{
 		packetConn: pc,
 		listener:   tl,

@@ -24,10 +24,9 @@ type module interface {
 
 type Resolver struct {
 	ipv6   bool
-	hosts  *trie.DomainTrie
 	group  singleflight.Group
 	cache  *cache.LruCache
-	module module
+	client module
 }
 
 // ResolveIP request with TypeA and TypeAAAA, priority return TypeA
@@ -106,7 +105,7 @@ func (r *Resolver) exchange(msg *DM.Message) (*DM.Message, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
 		defer cancel()
 
-		reply, err := r.module.ExchangeContext(ctx, msg)
+		reply, err := r.client.ExchangeContext(ctx, msg)
 		if err == nil {
 			r.putCache(reply)
 		}
@@ -136,6 +135,16 @@ func (r *Resolver) resolveIP(host string, dnsType DM.Type) (net.IP, error) {
 		} else {
 			return nil, resolver.ErrIPVersion
 		}
+	}
+
+	if ip := resolver.LookupHosts(host); ip != nil {
+		if v4 := ip.To4(); v4 != nil && dnsType == DM.TypeA {
+			return v4, nil
+		} else if v6 := ip.To16(); v6 != nil && dnsType == DM.TypeAAAA {
+			return v6, nil
+		}
+
+		return nil, resolver.ErrIPVersion
 	}
 
 	name, err := DM.NewName(D.Fqdn(host))
@@ -208,9 +217,8 @@ type Config struct {
 func NewResolver(config Config) *Resolver {
 	defaultResolver := &Resolver{
 		ipv6:   config.IPv6,
-		hosts:  config.Hosts,
 		cache:  cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true)),
-		module: &parallel{modules: transformClients(config.Default, dialer.DialContext)},
+		client: &parallel{modules: transformClients(config.Default, dialer.DialContext)},
 	}
 
 	dialWithResolver := func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -270,17 +278,9 @@ func NewResolver(config Config) *Resolver {
 		}
 	}
 
-	if config.Hosts != nil {
-		up = &hosts{
-			hosts:    config.Hosts,
-			fallback: up,
-		}
-	}
-
 	return &Resolver{
 		ipv6:   config.IPv6,
-		hosts:  config.Hosts,
 		cache:  cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true)),
-		module: up,
+		client: up,
 	}
 }
