@@ -49,10 +49,10 @@ func (d *dhcp) ExchangeContext(ctx context.Context, msg *dnsmessage.Message) (*d
 			return nil, err
 		}
 
-		var groups []upstream
+		var modules []module
 
 		for _, ip := range dns {
-			groups = append(groups, &client{
+			modules = append(modules, &client{
 				Client: &D.Client{
 					Transport: &D.UDPTransport{DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 						return dialer.DialContextWithHook(nil, dialer.DialerWithInterface(d.ifaceName), ctx, network, address)
@@ -62,7 +62,7 @@ func (d *dhcp) ExchangeContext(ctx context.Context, msg *dnsmessage.Message) (*d
 			})
 		}
 
-		d.upstreams = groups
+		d.modules = modules
 		d.statusAddr = addr
 		d.statusTTL = dhcpDefaultTTL
 

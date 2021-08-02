@@ -18,16 +18,16 @@ import (
 	"github.com/Dreamacro/clash/component/trie"
 )
 
-type upstream interface {
+type module interface {
 	ExchangeContext(ctx context.Context, msg *DM.Message) (*DM.Message, error)
 }
 
 type Resolver struct {
-	ipv6     bool
-	hosts    *trie.DomainTrie
-	group    singleflight.Group
-	cache    *cache.LruCache
-	upstream upstream
+	ipv6   bool
+	hosts  *trie.DomainTrie
+	group  singleflight.Group
+	cache  *cache.LruCache
+	module module
 }
 
 // ResolveIP request with TypeA and TypeAAAA, priority return TypeA
@@ -106,7 +106,7 @@ func (r *Resolver) exchange(msg *DM.Message) (*DM.Message, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
 		defer cancel()
 
-		reply, err := r.upstream.ExchangeContext(ctx, msg)
+		reply, err := r.module.ExchangeContext(ctx, msg)
 		if err == nil {
 			r.putCache(reply)
 		}
@@ -207,10 +207,10 @@ type Config struct {
 
 func NewResolver(config Config) *Resolver {
 	defaultResolver := &Resolver{
-		ipv6:     config.IPv6,
-		hosts:    config.Hosts,
-		cache:    cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true)),
-		upstream: &parallel{upstreams: transformClients(config.Default, dialer.DialContext)},
+		ipv6:   config.IPv6,
+		hosts:  config.Hosts,
+		cache:  cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true)),
+		module: &parallel{modules: transformClients(config.Default, dialer.DialContext)},
 	}
 
 	dialWithResolver := func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -232,7 +232,7 @@ func NewResolver(config Config) *Resolver {
 		return dialer.DialContext(ctx, network, net.JoinHostPort(host, port))
 	}
 
-	var up upstream = &parallel{upstreams: transformClients(config.Main, dialWithResolver)}
+	var up module = &parallel{modules: transformClients(config.Main, dialWithResolver)}
 
 	if len(config.Fallback) != 0 {
 		var filters []filter
@@ -278,9 +278,9 @@ func NewResolver(config Config) *Resolver {
 	}
 
 	return &Resolver{
-		ipv6:     config.IPv6,
-		hosts:    config.Hosts,
-		cache:    cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true)),
-		upstream: up,
+		ipv6:   config.IPv6,
+		hosts:  config.Hosts,
+		cache:  cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true)),
+		module: up,
 	}
 }

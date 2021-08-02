@@ -78,24 +78,24 @@ func (e EnhancedMode) String() string {
 	}
 }
 
-func transformClients(servers []NameServer, dial D.DialContextFunc) []upstream {
-	upstreams := make([]upstream, 0, len(servers))
+func transformClients(servers []NameServer, dial D.DialContextFunc) []module {
+	modules := make([]module, 0, len(servers))
 
 	for _, s := range servers {
 		switch s.Net {
 		case "udp":
-			upstreams = append(upstreams, &client{
+			modules = append(modules, &client{
 				Client:  &D.Client{Transport: &D.UDPTransport{DialContext: dial}},
 				address: s.Addr,
 			})
 		case "tcp":
-			upstreams = append(upstreams, &client{
+			modules = append(modules, &client{
 				Client:  &D.Client{Transport: &D.TCPTransport{DialContext: dial}},
 				address: s.Addr,
 			})
 		case "tls":
 			host, _, _ := net.SplitHostPort(s.Addr)
-			upstreams = append(upstreams, &client{
+			modules = append(modules, &client{
 				Client: &D.Client{Transport: &D.TLSTransport{
 					Config: &tls.Config{
 						// alpn identifier, see https://tools.ietf.org/html/draft-hoffman-dprive-dns-tls-alpn-00#page-6
@@ -107,7 +107,7 @@ func transformClients(servers []NameServer, dial D.DialContextFunc) []upstream {
 				address: s.Addr,
 			})
 		case "https":
-			upstreams = append(upstreams, &client{
+			modules = append(modules, &client{
 				Client: &D.Client{Transport: &D.HTTPTransport{Client: &http.Client{
 					Transport: &http.Transport{
 						ForceAttemptHTTP2: true,
@@ -117,12 +117,12 @@ func transformClients(servers []NameServer, dial D.DialContextFunc) []upstream {
 				address: s.Addr,
 			})
 		case "dhcp":
-			upstreams = append(upstreams, &dhcp{
+			modules = append(modules, &dhcp{
 				ifaceName: s.Addr,
 				singleDo:  singledo.NewSingle(time.Second * 20),
 			})
 		}
 	}
 
-	return upstreams
+	return modules
 }

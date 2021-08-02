@@ -14,12 +14,12 @@ import (
 var ErrAllDNSRequestFailed = errors.New("all DNS requests failed")
 
 type parallel struct {
-	upstreams []upstream
+	modules []module
 }
 
 func (p *parallel) ExchangeContext(ctx context.Context, msg *DM.Message) (*DM.Message, error) {
 	fast, ctx := picker.WithTimeout(ctx, resolver.DefaultDNSTimeout)
-	for _, client := range p.upstreams {
+	for _, client := range p.modules {
 		c := client
 		fast.Go(func() (interface{}, error) {
 			return c.ExchangeContext(ctx, msg)

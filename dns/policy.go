@@ -11,7 +11,7 @@ import (
 
 type policy struct {
 	policies *trie.DomainTrie
-	fallback upstream
+	fallback module
 }
 
 func (p *policy) ExchangeContext(ctx context.Context, msg *DM.Message) (*DM.Message, error) {
@@ -20,7 +20,7 @@ func (p *policy) ExchangeContext(ctx context.Context, msg *DM.Message) (*DM.Mess
 	}
 
 	if n := p.policies.Search(D.TrimFqdn(msg.Questions[0].Name.String())); n != nil {
-		return n.Data.(upstream).ExchangeContext(ctx, msg)
+		return n.Data.(module).ExchangeContext(ctx, msg)
 	}
 
 	return p.fallback.ExchangeContext(ctx, msg)

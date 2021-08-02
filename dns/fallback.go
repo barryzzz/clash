@@ -10,8 +10,8 @@ import (
 )
 
 type fallback struct {
-	main     upstream
-	fallback upstream
+	main     module
+	fallback module
 	filters  []filter
 }
 

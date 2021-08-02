@@ -13,7 +13,7 @@ import (
 
 type hosts struct {
 	hosts    *trie.DomainTrie
-	fallback upstream
+	fallback module
 }
 
 func (h *hosts) ExchangeContext(ctx context.Context, msg *DM.Message) (*DM.Message, error) {
