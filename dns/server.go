@@ -1,14 +1,15 @@
 package dns
 
 import (
-	"errors"
 	"net"
 
+	"golang.org/x/net/dns/dnsmessage"
+
 	"github.com/Dreamacro/clash/common/sockopt"
+	D "github.com/Dreamacro/clash/component/dns"
+	R "github.com/Dreamacro/clash/component/resolver"
 	"github.com/Dreamacro/clash/context"
 	"github.com/Dreamacro/clash/log"
-
-	D "github.com/miekg/dns"
 )
 
 var (
@@ -19,28 +20,41 @@ var (
 )
 
 type Server struct {
-	*D.Server
-	handler handler
+	packetConn net.PacketConn
+	listener   net.Listener
+	handler    handler
 }
 
 // ServeDNS implement D.Handler ServeDNS
-func (s *Server) ServeDNS(w D.ResponseWriter, r *D.Msg) {
-	msg, err := handlerWithContext(s.handler, r)
-	if err != nil {
-		D.HandleFailed(w, r)
+func (s *Server) ServeDNS(w D.ResponseWriter, msg *dnsmessage.Message) {
+	if len(msg.Questions) == 0 {
 		return
 	}
-	msg.Compress = true
-	w.WriteMsg(msg)
-}
 
-func handlerWithContext(handler handler, msg *D.Msg) (*D.Msg, error) {
-	if len(msg.Question) == 0 {
-		return nil, errors.New("at least one question is required")
+	handler := s.handler
+	if handler == nil {
+		return
 	}
 
-	ctx := context.NewDNSContext(msg)
-	return handler(ctx, msg)
+	reply, err := handler(context.NewDNSContext(msg), msg)
+	if err != nil {
+		w.WriteMessage(reply)
+
+		return
+	}
+}
+
+// Close implement io.Closer
+func (s *Server) Close() error {
+	if s.packetConn != nil {
+		s.packetConn.Close()
+	}
+
+	if s.listener != nil {
+		s.listener.Close()
+	}
+
+	return nil
 }
 
 func (s *Server) setHandler(handler handler) {
@@ -54,8 +68,8 @@ func ReCreateServer(addr string, resolver *Resolver, mapper *ResolverEnhancer) e
 		return nil
 	}
 
-	if server.Server != nil {
-		server.Shutdown()
+	if server != nil {
+		server.Close()
 		server = &Server{}
 		address = ""
 	}
@@ -65,28 +79,41 @@ func ReCreateServer(addr string, resolver *Resolver, mapper *ResolverEnhancer) e
 		return nil
 	}
 
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	pc, err := net.ListenPacket("udp", addr)
 	if err != nil {
 		return err
 	}
 
-	p, err := net.ListenUDP("udp", udpAddr)
+	tl, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		log.Warnln("Failed to Listen TCP Address: %s", err)
 	}
 
-	err = sockopt.UDPReuseaddr(p)
+	err = sockopt.UDPReuseaddr(pc.(*net.UDPConn))
 	if err != nil {
 		log.Warnln("Failed to Reuse UDP Address: %s", err)
 	}
 
 	address = addr
 	handler := newHandler(resolver, mapper)
-	server = &Server{handler: handler}
-	server.Server = &D.Server{Addr: addr, PacketConn: p, Handler: server}
+	server = &Server{
+		packetConn: pc,
+		listener:   tl,
+		handler:    handler,
+	}
+	dServer := &D.Server{
+		Handler:      server,
+		ReadTimeout:  R.DefaultDNSTimeout,
+		WriteTimeout: R.DefaultDNSTimeout,
+	}
 
 	go func() {
-		server.ActivateAndServe()
+		dServer.ServePacket(pc)
 	}()
+
+	if tl != nil {
+		dServer.ServeStream(tl)
+	}
+
 	return nil
 }
