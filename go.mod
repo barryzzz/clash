@@ -10,7 +10,6 @@ require (
 	github.com/gofrs/uuid v4.0.0+incompatible
 	github.com/gorilla/websocket v1.4.2
 	github.com/insomniacslk/dhcp v0.0.0-20210621130208-1cac67f12b1e
-	github.com/miekg/dns v1.1.43
 	github.com/oschwald/geoip2-golang v1.5.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
