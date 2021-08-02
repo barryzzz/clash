@@ -112,7 +112,9 @@ func ReCreateServer(addr string, resolver *Resolver, mapper *ResolverEnhancer) e
 	}()
 
 	if tl != nil {
-		dServer.ServeStream(tl)
+		go func() {
+			dServer.ServeStream(tl)
+		}()
 	}
 
 	return nil
