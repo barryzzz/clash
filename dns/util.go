@@ -83,7 +83,7 @@ func transformClients(servers []NameServer, dial D.DialContextFunc) []module {
 
 	for _, s := range servers {
 		switch s.Net {
-		case "udp":
+		case "udp", "":
 			modules = append(modules, &client{
 				Client:  &D.Client{Transport: &D.UDPTransport{DialContext: dial}},
 				address: s.Addr,
