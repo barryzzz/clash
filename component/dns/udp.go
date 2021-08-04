@@ -25,12 +25,6 @@ func (t *UDPTransport) RoundTrip(ctx context.Context, msg *dnsmessage.Message, a
 	errCh := make(chan error, 1)
 
 	go func() {
-		if err := writeMsg(conn, msg); err != nil {
-			errCh <- err
-
-			return
-		}
-
 		for {
 			reply, err := readMsg(conn)
 			if err != nil {
@@ -48,6 +42,10 @@ func (t *UDPTransport) RoundTrip(ctx context.Context, msg *dnsmessage.Message, a
 			return
 		}
 	}()
+
+	if err := writeMsg(conn, msg); err != nil {
+		return nil, err
+	}
 
 	select {
 	case res := <-resCh:
