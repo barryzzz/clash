@@ -240,7 +240,7 @@ func NewResolver(config Config) *Resolver {
 		return dialer.DialContext(ctx, network, net.JoinHostPort(host, port))
 	}
 
-	var up module = &parallel{modules: transformClients(config.Main, dialWithResolver)}
+	var modules module = &parallel{modules: transformClients(config.Main, dialWithResolver)}
 
 	if len(config.Fallback) != 0 {
 		var filters []filter
@@ -259,8 +259,8 @@ func NewResolver(config Config) *Resolver {
 			filters = append(filters, &domainFilter{domains: domains})
 		}
 
-		up = &fallback{
-			main:     up,
+		modules = &fallback{
+			main:     modules,
 			fallback: &parallel{transformClients(config.Fallback, dialWithResolver)},
 			filters:  filters,
 		}
@@ -272,15 +272,15 @@ func NewResolver(config Config) *Resolver {
 			policies.Insert(domain, transformClients([]NameServer{nameserver}, dialWithResolver)[0])
 		}
 
-		up = &policy{
+		modules = &policy{
 			policies: policies,
-			fallback: up,
+			fallback: modules,
 		}
 	}
 
 	return &Resolver{
 		ipv6:   config.IPv6,
 		cache:  cache.NewLRUCache(cache.WithSize(4096), cache.WithStale(true)),
-		client: up,
+		client: modules,
 	}
 }
