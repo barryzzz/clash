@@ -39,10 +39,18 @@ func (s *Server) ServeDNS(w D.ResponseWriter, msg *dnsmessage.Message) {
 
 	reply, err := handler(context.NewDNSContext(msg), msg)
 	if err != nil {
-		w.WriteMessage(reply)
-
-		return
+		reply = &dnsmessage.Message{
+			Header: dnsmessage.Header{
+				ID:                 msg.ID,
+				Response:           true,
+				RecursionAvailable: true,
+				RCode:              dnsmessage.RCodeRefused,
+			},
+			Questions: msg.Questions,
+		}
 	}
+
+	w.WriteMessage(reply)
 }
 
 // Close implement io.Closer
