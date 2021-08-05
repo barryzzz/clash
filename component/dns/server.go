@@ -1,16 +1,12 @@
 package dns
 
 import (
-	"encoding/binary"
 	"errors"
-	"io"
 	"net"
 	"sync"
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
-
-	"github.com/Dreamacro/clash/common/pool"
 )
 
 var ErrDuplicateWrite = errors.New("duplicate write")
@@ -93,50 +89,26 @@ func (s *Server) ServeStream(listener net.Listener) error {
 func (s *Server) handleConn(conn net.Conn) {
 	defer conn.Close()
 
-	buf := pool.Get(pool.RelayBufferSize)
-	defer pool.Put(buf)
-
 	for {
-		err := conn.SetReadDeadline(time.Now().Add(s.ReadTimeout))
+		if s.ReadTimeout > 0 {
+			err := conn.SetReadDeadline(time.Now().Add(s.ReadTimeout))
+			if err != nil {
+				return
+			}
+		}
+
+		msg, err := readMsgWithLength(conn)
 		if err != nil {
 			return
 		}
-
-		_, err = io.ReadFull(conn, buf[:2])
-		if err != nil {
-			return
-		}
-
-		length := int(binary.BigEndian.Uint16(buf[:2]))
-		if length > cap(buf) {
-			return
-		}
-
-		n, err := io.ReadFull(conn, buf[:length])
-		if err != nil {
-			return
-		}
-
-		msg := &dnsmessage.Message{}
-
-		err = msg.Unpack(buf[:n])
-		if err != nil {
-			continue
-		}
-
-		conn.SetReadDeadline(time.Time{})
 
 		writer := &responseWriter{writeBack: func(msg *dnsmessage.Message) error {
-			pkt, err := msg.AppendPack(buf[:0])
-			if err != nil {
-				return err
+			if s.WriteTimeout > 0 {
+				conn.SetWriteDeadline(time.Now().Add(s.WriteTimeout))
+				defer conn.SetWriteDeadline(time.Time{})
 			}
 
-			conn.SetWriteDeadline(time.Now().Add(s.WriteTimeout))
-			defer conn.SetWriteDeadline(time.Time{})
-
-			_, err = conn.Write(pkt)
-			return err
+			return writeMsgWithLength(conn, msg)
 		}}
 
 		s.handleMessage(writer, msg)
