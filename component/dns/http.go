@@ -3,10 +3,15 @@ package dns
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 
 	"golang.org/x/net/dns/dnsmessage"
+)
+
+var (
+	ErrResponseStatus = errors.New("invalid response status")
 )
 
 type HTTPTransport struct {
@@ -35,6 +40,8 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, msg *dnsmessage.Message, 
 	resp, err := client.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, err
+	} else if resp.StatusCode != http.StatusOK {
+		return nil, ErrResponseStatus
 	}
 
 	data, err := io.ReadAll(resp.Body)
