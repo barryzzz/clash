@@ -21,6 +21,10 @@ func ShallowCloneMessage(msg *dnsmessage.Message) *dnsmessage.Message {
 }
 
 func ExtractIPsFromMessage(msg *dnsmessage.Message) []net.IP {
+	if msg == nil {
+		return nil
+	}
+
 	res := make([]net.IP, 0, len(msg.Answers))
 
 	for _, ans := range msg.Answers {
