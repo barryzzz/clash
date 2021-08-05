@@ -41,7 +41,7 @@ func (r *Resolver) ResolveIP(host string) (ip net.IP, err error) {
 		ch <- ip
 	}()
 
-	ip, err = r.resolveIP(host, DM.TypeAAAA)
+	ip, err = r.resolveIP(host, DM.TypeA)
 	if err == nil {
 		return
 	}
@@ -229,7 +229,7 @@ func NewResolver(config Config) *Resolver {
 
 		ip := net.ParseIP(host)
 		if ip == nil {
-			ip, err := defaultResolver.ResolveIP(host)
+			ip, err = defaultResolver.ResolveIP(host)
 			if err != nil {
 				return nil, err
 			}
