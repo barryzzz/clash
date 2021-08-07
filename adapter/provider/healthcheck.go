@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Dreamacro/clash/common/batch"
+	"github.com/Dreamacro/clash/component/limits"
 	C "github.com/Dreamacro/clash/constant"
 
 	"go.uber.org/atomic"
@@ -12,6 +13,10 @@ import (
 
 const (
 	defaultURLTestTimeout = time.Second * 5
+)
+
+var (
+	healthCheckQueue *batch.Queue
 )
 
 type HealthCheckOption struct {
@@ -26,6 +31,14 @@ type HealthCheck struct {
 	lazy      bool
 	lastTouch *atomic.Int64
 	done      chan struct{}
+}
+
+func init() {
+	limit := limits.FdLimits / 2
+
+	if limit > 0 {
+		healthCheckQueue = batch.MakeQueue(limit)
+	}
 }
 
 func (hc *HealthCheck) process() {
@@ -59,7 +72,7 @@ func (hc *HealthCheck) touch() {
 }
 
 func (hc *HealthCheck) check() {
-	b, _ := batch.New(context.Background(), batch.WithConcurrencyNum(10))
+	b, _ := batch.New(context.Background(), batch.WithQueue(healthCheckQueue))
 	for _, proxy := range hc.proxies {
 		p := proxy
 		b.Go(p.Name(), func() (interface{}, error) {

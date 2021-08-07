@@ -3,6 +3,8 @@ package batch
 import (
 	"context"
 	"sync"
+
+	"golang.org/x/sync/semaphore"
 )
 
 type Option = func(b *Batch)
@@ -17,12 +19,16 @@ type Error struct {
 	Err error
 }
 
+type Queue struct {
+	sem *semaphore.Weighted
+}
+
 func WithConcurrencyNum(n int) Option {
+	return WithQueue(MakeQueue(n))
+}
+
+func WithQueue(q *Queue) Option {
 	return func(b *Batch) {
-		q := make(chan struct{}, n)
-		for i := 0; i < n; i++ {
-			q <- struct{}{}
-		}
 		b.queue = q
 	}
 }
@@ -30,7 +36,7 @@ func WithConcurrencyNum(n int) Option {
 // Batch similar to errgroup, but can control the maximum number of concurrent
 type Batch struct {
 	result map[string]Result
-	queue  chan struct{}
+	queue  *Queue
 	wg     sync.WaitGroup
 	mux    sync.Mutex
 	err    *Error
@@ -43,10 +49,8 @@ func (b *Batch) Go(key string, fn func() (interface{}, error)) {
 	go func() {
 		defer b.wg.Done()
 		if b.queue != nil {
-			<-b.queue
-			defer func() {
-				b.queue <- struct{}{}
-			}()
+			b.queue.sem.Acquire(context.TODO(), 1)
+			defer b.queue.sem.Release(1)
 		}
 
 		value, err := fn()
@@ -102,4 +106,8 @@ func New(ctx context.Context, opts ...Option) (*Batch, context.Context) {
 
 	b.cancel = cancel
 	return b, ctx
+}
+
+func MakeQueue(concurrencyNum int) *Queue {
+	return &Queue{sem: semaphore.NewWeighted(int64(concurrencyNum))}
 }
