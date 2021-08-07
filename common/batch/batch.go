@@ -50,7 +50,9 @@ func (b *Batch) Go(key string, fn func() (interface{}, error)) {
 	go func() {
 		defer b.wg.Done()
 		if b.queue != nil {
-			b.queue.sem.Acquire(b.ctx, 1)
+			if err := b.queue.sem.Acquire(b.ctx, 1); err != nil {
+				return // cancelled
+			}
 			defer b.queue.sem.Release(1)
 		}
 
