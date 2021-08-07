@@ -41,6 +41,7 @@ type Batch struct {
 	mux    sync.Mutex
 	err    *Error
 	once   sync.Once
+	ctx    context.Context
 	cancel func()
 }
 
@@ -49,7 +50,7 @@ func (b *Batch) Go(key string, fn func() (interface{}, error)) {
 	go func() {
 		defer b.wg.Done()
 		if b.queue != nil {
-			b.queue.sem.Acquire(context.TODO(), 1)
+			b.queue.sem.Acquire(b.ctx, 1)
 			defer b.queue.sem.Release(1)
 		}
 
@@ -104,7 +105,9 @@ func New(ctx context.Context, opts ...Option) (*Batch, context.Context) {
 		o(b)
 	}
 
+	b.ctx = ctx
 	b.cancel = cancel
+
 	return b, ctx
 }
 

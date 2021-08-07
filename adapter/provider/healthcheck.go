@@ -72,12 +72,13 @@ func (hc *HealthCheck) touch() {
 }
 
 func (hc *HealthCheck) check() {
-	b, _ := batch.New(context.Background(), batch.WithQueue(healthCheckQueue))
+	ctx, cancel := context.WithTimeout(context.Background(), defaultURLTestTimeout)
+	defer cancel()
+
+	b, ctx := batch.New(ctx, batch.WithQueue(healthCheckQueue))
 	for _, proxy := range hc.proxies {
 		p := proxy
 		b.Go(p.Name(), func() (interface{}, error) {
-			ctx, cancel := context.WithTimeout(context.Background(), defaultURLTestTimeout)
-			defer cancel()
 			p.URLTest(ctx, hc.url)
 			return nil, nil
 		})
