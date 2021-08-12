@@ -22,7 +22,7 @@ import (
 	R "github.com/Dreamacro/clash/rule"
 	T "github.com/Dreamacro/clash/tunnel"
 
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // General config
@@ -470,24 +470,19 @@ func parseNameServer(servers []string) ([]dns.NameServer, error) {
 			return nil, fmt.Errorf("DNS NameServer[%d] format error: %s", idx, err.Error())
 		}
 
-		var addr, dnsNetType string
+		var addr string
 		switch u.Scheme {
 		case "udp":
 			addr, err = hostWithDefaultPort(u.Host, "53")
-			dnsNetType = "" // UDP
 		case "tcp":
 			addr, err = hostWithDefaultPort(u.Host, "53")
-			dnsNetType = "tcp" // TCP
 		case "tls":
 			addr, err = hostWithDefaultPort(u.Host, "853")
-			dnsNetType = "tcp-tls" // DNS over TLS
 		case "https":
 			clearURL := url.URL{Scheme: "https", Host: u.Host, Path: u.Path}
 			addr = clearURL.String()
-			dnsNetType = "https" // DNS over HTTPS
 		case "dhcp":
 			addr = u.Host
-			dnsNetType = "dhcp" // UDP from DHCP
 		default:
 			return nil, fmt.Errorf("DNS NameServer[%d] unsupport scheme: %s", idx, u.Scheme)
 		}
@@ -499,7 +494,7 @@ func parseNameServer(servers []string) ([]dns.NameServer, error) {
 		nameservers = append(
 			nameservers,
 			dns.NameServer{
-				Net:  dnsNetType,
+				Net:  u.Scheme,
 				Addr: addr,
 			},
 		)
