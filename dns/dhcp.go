@@ -3,29 +3,37 @@ package dns
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
+	"sync"
 	"time"
 
 	D "github.com/miekg/dns"
 
-	"github.com/Dreamacro/clash/common/singledo"
 	"github.com/Dreamacro/clash/component/dhcp"
-	"github.com/Dreamacro/clash/component/dialer"
 	"github.com/Dreamacro/clash/component/iface"
 	"github.com/Dreamacro/clash/component/resolver"
+	"github.com/Dreamacro/clash/log"
 )
 
-const defaultCacheTTL = 60
+const (
+	IfaceTTL = time.Second * 20
+	DHCPTTL  = time.Minute * 10
+)
+
+var (
+	ErrDHCPUnavailable = errors.New("dhcp unavailable")
+)
 
 type dhcpClient struct {
-	*D.Client
-
 	ifaceName string
-	dnsAddr   *singledo.Single
 
-	cacheDNS  net.IP
-	cacheAddr *net.IPNet
-	cacheTTL  int
+	lock            sync.Mutex
+	ifaceInvalidate time.Time
+	dnsInvalidate   time.Time
+
+	ifaceAddr *net.IPNet
+	resolver  *Resolver
 }
 
 func (d *dhcpClient) Exchange(m *D.Msg) (msg *D.Msg, err error) {
@@ -36,85 +44,66 @@ func (d *dhcpClient) Exchange(m *D.Msg) (msg *D.Msg, err error) {
 }
 
 func (d *dhcpClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
-	value, err, _ := d.dnsAddr.Do(func() (interface{}, error) {
-		ifaceObj, err := iface.ResolveInterface(d.ifaceName)
-		if err != nil {
-			return nil, err
-		}
-
-		addr, err := iface.PickIPv4Addr(ifaceObj.Addrs)
-		if err != nil {
-			return nil, err
-		}
-
-		if d.cacheTTL > 0 && d.cacheAddr.IP.Equal(addr.IP) && bytes.Equal(d.cacheAddr.Mask, addr.Mask) {
-			d.cacheTTL--
-
-			return d.cacheDNS, nil
-		}
-
-		dns, err := dhcp.ResolveDNSFromDHCP(ctx, ifaceObj.Name)
-		if err != nil {
-			return nil, err
-		}
-
-		d.cacheTTL = defaultCacheTTL
-		d.cacheDNS = dns
-		d.cacheAddr = addr
-
-		return dns, nil
-	})
-	if err != nil {
-		return nil, err
+	res := d.resolve(ctx)
+	if res == nil {
+		return nil, ErrDHCPUnavailable
 	}
 
-	dns := value.(net.IP)
-
-	conn, err := dialer.DialContext(ctx, "udp", net.JoinHostPort(dns.String(), "53"), dialer.WithInterface(d.ifaceName))
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	r := make(chan *D.Msg, 1)
-	e := make(chan error, 1)
-
-	go d.exchangeWithConn(conn, m, r, e)
-
-	select {
-	case r := <-r:
-		return r, nil
-	case e := <-e:
-		return nil, e
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+	return res.ExchangeContext(ctx, m)
 }
 
-func (d *dhcpClient) exchangeWithConn(conn net.Conn, m *D.Msg, r chan<- *D.Msg, e chan<- error) {
-	defer conn.Close()
+func (d *dhcpClient) resolve(ctx context.Context) *Resolver {
+	d.lock.Lock()
+	defer d.lock.Unlock()
 
-	m, _, err := d.Client.ExchangeWithConn(m, &D.Conn{
-		Conn:         conn,
-		UDPSize:      D.MinMsgSize,
-		TsigSecret:   nil,
-		TsigProvider: nil,
-	})
-	if err != nil {
-		e <- err
-		return
+	if d.ifaceInvalidate.Before(time.Now()) {
+		return d.resolver
 	}
 
-	r <- m
+	var err error
+	defer func() {
+		if err != nil {
+			log.Debugln("Resolve DNS from DHCP: %v", err)
+
+			d.resolver = nil
+		}
+	}()
+
+	d.ifaceInvalidate = time.Now().Add(IfaceTTL)
+
+	ifaceObj, err := iface.ResolveInterface(d.ifaceName)
+	if err != nil {
+		return nil
+	}
+
+	addr, err := iface.PickIPv4Addr(ifaceObj.Addrs)
+	if err != nil {
+		return nil
+	}
+
+	if time.Now().Before(d.dnsInvalidate) && d.resolver != nil && d.ifaceAddr.IP.Equal(addr.IP) && bytes.Equal(d.ifaceAddr.Mask, addr.Mask) {
+		return d.resolver
+	}
+
+	d.dnsInvalidate = time.Now().Add(DHCPTTL)
+
+	dns, err := dhcp.ResolveDNSFromDHCP(ctx, d.ifaceName)
+	if err != nil {
+		return nil
+	}
+
+	nameserver := make([]NameServer, 0, len(dns))
+	for _, d := range dns {
+		nameserver = append(nameserver, NameServer{Addr: net.JoinHostPort(d.String(), "53")})
+	}
+
+	d.resolver = NewResolver(Config{
+		Main: nameserver,
+	})
+
+	return d.resolver
 }
 
 func newDHCPClient(ifaceName string) *dhcpClient {
-	return &dhcpClient{
-		Client: &D.Client{
-			Net:     "udp",
-			UDPSize: D.MinMsgSize,
-		},
-		ifaceName: ifaceName,
-		dnsAddr:   singledo.NewSingle(time.Second * 20),
-	}
+	return &dhcpClient{ifaceName: ifaceName}
 }
