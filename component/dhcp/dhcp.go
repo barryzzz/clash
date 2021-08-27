@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net"
 
-	"github.com/insomniacslk/dhcp/dhcpv4"
-
 	"github.com/Dreamacro/clash/component/iface"
+
+	"github.com/insomniacslk/dhcp/dhcpv4"
 )
 
 var ErrNotResponding = errors.New("DHCP not responding")
