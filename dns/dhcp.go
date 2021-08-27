@@ -56,7 +56,7 @@ func (d *dhcpClient) resolve(ctx context.Context) *Resolver {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	if d.ifaceInvalidate.Before(time.Now()) {
+	if time.Now().Before(d.ifaceInvalidate) {
 		return d.resolver
 	}
 
@@ -85,6 +85,7 @@ func (d *dhcpClient) resolve(ctx context.Context) *Resolver {
 		return d.resolver
 	}
 
+	d.ifaceAddr = addr
 	d.dnsInvalidate = time.Now().Add(DHCPTTL)
 
 	dns, err := dhcp.ResolveDNSFromDHCP(ctx, d.ifaceName)

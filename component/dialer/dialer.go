@@ -20,7 +20,7 @@ type Config struct {
 type Option func(opt *Config) error
 
 func (d *Config) DialContext() (net.Conn, error) {
-	return d.Dialer.DialContext(d.Context, d.Address, d.Network)
+	return d.Dialer.DialContext(d.Context, d.Network, d.Address)
 }
 
 func (l *Config) ListenPacket() (net.PacketConn, error) {
