@@ -3,9 +3,8 @@ package dhcp
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"net"
-
-	"github.com/Dreamacro/clash/component/iface"
 
 	"github.com/insomniacslk/dhcp/dhcpv4"
 )
@@ -14,11 +13,6 @@ var ErrNotResponding = errors.New("DHCP not responding")
 var ErrNotFound = errors.New("DNS option not found")
 
 func ResolveDNSFromDHCP(context context.Context, ifaceName string) ([]net.IP, error) {
-	ifaceObj, err := iface.ResolveInterface(ifaceName)
-	if err != nil {
-		return nil, err
-	}
-
 	conn, err := ListenDHCPClient(context, ifaceName)
 	if err != nil {
 		return nil, err
@@ -27,12 +21,7 @@ func ResolveDNSFromDHCP(context context.Context, ifaceName string) ([]net.IP, er
 
 	result := make(chan []net.IP, 1)
 
-	addr, err := iface.PickIPv4Addr(ifaceObj.Addrs)
-	if err != nil {
-		return nil, err
-	}
-
-	inform, err := dhcpv4.NewInform(ifaceObj.HardwareAddr, addr.IP, dhcpv4.WithBroadcast(false), dhcpv4.WithRequestedOptions(dhcpv4.OptionDomainNameServer))
+	inform, err := dhcpv4.NewDiscovery(randomHardware(), dhcpv4.WithBroadcast(true), dhcpv4.WithRequestedOptions(dhcpv4.OptionDomainNameServer))
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +60,7 @@ func receiveAck(conn net.PacketConn, id dhcpv4.TransactionID, result chan<- []ne
 			continue
 		}
 
-		if pkt.MessageType() != dhcpv4.MessageTypeAck {
+		if pkt.MessageType() != dhcpv4.MessageTypeOffer {
 			continue
 		}
 
@@ -88,4 +77,16 @@ func receiveAck(conn net.PacketConn, id dhcpv4.TransactionID, result chan<- []ne
 
 		return
 	}
+}
+
+func randomHardware() net.HardwareAddr {
+	addr := make(net.HardwareAddr, 6)
+
+	addr[0] = 0xff
+
+	for i := 1; i < len(addr); i++ {
+		addr[i] = byte(rand.Intn(254) + 1)
+	}
+
+	return addr
 }

@@ -5,13 +5,13 @@ package dialer
 
 import (
 	"net"
+	"strconv"
 	"syscall"
 
 	"github.com/Dreamacro/clash/component/iface"
-	C "github.com/Dreamacro/clash/constant"
 )
 
-func lookupTCPAddr(ip net.IP, addrs []*net.IPNet) (*net.TCPAddr, error) {
+func lookupTCPAddr(ip net.IP, addrs []*net.IPNet, port string) (*net.TCPAddr, error) {
 	var addr *net.IPNet
 	var err error
 
@@ -24,10 +24,11 @@ func lookupTCPAddr(ip net.IP, addrs []*net.IPNet) (*net.TCPAddr, error) {
 		return nil, err
 	}
 
-	return &net.TCPAddr{IP: addr.IP, Port: 0}, nil
+	p, _ := strconv.Atoi(port)
+	return &net.TCPAddr{IP: addr.IP, Port: p}, nil
 }
 
-func lookupUDPAddr(ip net.IP, addrs []*net.IPNet) (*net.UDPAddr, error) {
+func lookupUDPAddr(ip net.IP, addrs []*net.IPNet, port string) (*net.UDPAddr, error) {
 	var addr *net.IPNet
 	var err error
 
@@ -40,10 +41,11 @@ func lookupUDPAddr(ip net.IP, addrs []*net.IPNet) (*net.UDPAddr, error) {
 		return nil, err
 	}
 
-	return &net.UDPAddr{IP: addr.IP, Port: 0}, nil
+	p, _ := strconv.Atoi(port)
+	return &net.UDPAddr{IP: addr.IP, Port: p}, nil
 }
 
-func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, network, _ string, destination net.IP) error {
+func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, network, address string, destination net.IP) error {
 	if !destination.IsGlobalUnicast() {
 		return nil
 	}
@@ -53,15 +55,20 @@ func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, network, _ string, 
 		return err
 	}
 
+	_, port, err := net.SplitHostPort(dialer.LocalAddr.String())
+	if err != nil {
+		port = "0"
+	}
+
 	switch network {
 	case "tcp", "tcp4", "tcp6":
-		if addr, err := lookupTCPAddr(destination, ifaceObj.Addrs); err == nil {
+		if addr, err := lookupTCPAddr(destination, ifaceObj.Addrs, port); err == nil {
 			dialer.LocalAddr = addr
 		} else {
 			return err
 		}
 	case "udp", "udp4", "udp6":
-		if addr, err := lookupUDPAddr(destination, ifaceObj.Addrs); err == nil {
+		if addr, err := lookupUDPAddr(destination, ifaceObj.Addrs, port); err == nil {
 			dialer.LocalAddr = addr
 		} else {
 			return err
@@ -71,7 +78,7 @@ func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, network, _ string, 
 	return nil
 }
 
-func bindIfaceToListenConfig(ifaceName string, _ *net.ListenConfig, _, _ string) (string, error) {
+func bindIfaceToListenConfig(ifaceName string, _ *net.ListenConfig, _, address string) (string, error) {
 	ifaceObj, err := iface.ResolveInterface(ifaceName)
 	if err != nil {
 		return "", err
@@ -82,7 +89,12 @@ func bindIfaceToListenConfig(ifaceName string, _ *net.ListenConfig, _, _ string)
 		return "", err
 	}
 
-	return net.JoinHostPort(addr.IP.String(), "0"), nil
+	_, port, err := net.SplitHostPort(address)
+	if err != nil {
+		port = "0"
+	}
+
+	return net.JoinHostPort(addr.IP.String(), port), nil
 }
 
 func addrReuseToListenConfig(lc *net.ListenConfig) {
