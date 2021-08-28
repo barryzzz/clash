@@ -8,25 +8,6 @@ import (
 	"github.com/Dreamacro/clash/component/resolver"
 )
 
-type Config struct {
-	Dialer       *net.Dialer
-	ListenConfig *net.ListenConfig
-	Context      context.Context
-	Network      string
-	Address      string
-	IP           net.IP
-}
-
-type Option func(opt *Config) error
-
-func (d *Config) DialContext() (net.Conn, error) {
-	return d.Dialer.DialContext(d.Context, d.Network, d.Address)
-}
-
-func (l *Config) ListenPacket() (net.PacketConn, error) {
-	return l.ListenConfig.ListenPacket(l.Context, l.Network, l.Address)
-}
-
 func DialContext(ctx context.Context, network, address string, options ...Option) (net.Conn, error) {
 	switch network {
 	case "tcp4", "tcp6", "udp4", "udp6":
@@ -55,50 +36,48 @@ func DialContext(ctx context.Context, network, address string, options ...Option
 }
 
 func ListenPacket(ctx context.Context, network, address string, options ...Option) (net.PacketConn, error) {
-	cfg := &Config{
-		ListenConfig: &net.ListenConfig{},
-		Context:      ctx,
-		Network:      network,
-		Address:      address,
-	}
+	cfg := &Config{}
 
 	for _, o := range DefaultOptions {
-		if err := o(cfg); err != nil {
-			return nil, err
-		}
+		o(cfg)
 	}
-
 	for _, o := range options {
-		if err := o(cfg); err != nil {
-			return nil, err
-		}
+		o(cfg)
 	}
 
-	return cfg.ListenPacket()
+	lc := &net.ListenConfig{}
+	if cfg.InterfaceName != "" {
+		addr, err := bindIfaceToListenConfig(cfg.InterfaceName, lc, network, address)
+		if err != nil {
+			return nil, err
+		}
+		address = addr
+	}
+	if cfg.AddrReuse {
+		addrReuseToListenConfig(lc)
+	}
+
+	return lc.ListenPacket(ctx, network, address)
 }
 
-func dialContext(ctx context.Context, network, address string, ip net.IP, options []Option) (net.Conn, error) {
-	opt := &Config{
-		Dialer:  &net.Dialer{},
-		Context: ctx,
-		Network: network,
-		Address: address,
-		IP:      ip,
-	}
+func dialContext(ctx context.Context, network, address string, destination net.IP, options []Option) (net.Conn, error) {
+	opt := &Config{}
 
 	for _, o := range DefaultOptions {
-		if err := o(opt); err != nil {
-			return nil, err
-		}
+		o(opt)
 	}
-
 	for _, o := range options {
-		if err := o(opt); err != nil {
+		o(opt)
+	}
+
+	dialer := &net.Dialer{}
+	if opt.InterfaceName != "" {
+		if err := bindIfaceToDialer(opt.InterfaceName, dialer, network, address, destination); err != nil {
 			return nil, err
 		}
 	}
 
-	return opt.DialContext()
+	return dialer.DialContext(ctx, network, address)
 }
 
 func dualStackDialContext(ctx context.Context, network, address string, options []Option) (net.Conn, error) {

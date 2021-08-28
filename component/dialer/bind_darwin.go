@@ -9,13 +9,19 @@ import (
 
 type controlFn = func(network, address string, c syscall.RawConn) error
 
-func bindControl(ifaceIdx int) controlFn {
-	return func(network, address string, c syscall.RawConn) error {
+func bindControl(ifaceIdx int, chain controlFn) controlFn {
+	return func(network, address string, c syscall.RawConn) (err error) {
+		defer func() {
+			if err == nil && chain != nil {
+				err = chain(network, address, c)
+			}
+		}()
+
 		ipStr, _, err := net.SplitHostPort(address)
 		if err == nil {
 			ip := net.ParseIP(ipStr)
 			if ip != nil && !ip.IsGlobalUnicast() {
-				return nil
+				return
 			}
 		}
 
@@ -30,22 +36,38 @@ func bindControl(ifaceIdx int) controlFn {
 	}
 }
 
-func bindIfaceToDialer(dialer *net.Dialer, ifaceName string) error {
+func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, _, _ string, _ net.IP) error {
 	ifaceObj, err := iface.ResolveInterface(ifaceName)
 	if err != nil {
 		return err
 	}
 
-	dialer.Control = bindControl(ifaceObj.Index)
+	dialer.Control = bindControl(ifaceObj.Index, dialer.Control)
 	return nil
 }
 
-func bindIfaceToListenConfig(lc *net.ListenConfig, ifaceName string) error {
+func bindIfaceToListenConfig(ifaceName string, lc *net.ListenConfig, _, address string) (string, error) {
 	ifaceObj, err := iface.ResolveInterface(ifaceName)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	lc.Control = bindControl(ifaceObj.Index)
-	return nil
+	lc.Control = bindControl(ifaceObj.Index, lc.Control)
+	return address, nil
+}
+
+func addrReuseToListenConfig(lc *net.ListenConfig) {
+	chain := lc.Control
+
+	lc.Control = func(network, address string, c syscall.RawConn) (err error) {
+		defer func() {
+			if err == nil && chain != nil {
+				err = chain(network, address, c)
+			}
+		}()
+
+		return c.Control(func(fd uintptr) {
+			syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+		})
+	}
 }

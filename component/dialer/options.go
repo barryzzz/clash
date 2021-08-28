@@ -4,25 +4,21 @@ var (
 	DefaultOptions []Option
 )
 
+type Config struct {
+	InterfaceName string
+	AddrReuse     bool
+}
+
+type Option func(opt *Config)
+
 func WithInterface(name string) Option {
-	return func(opt *Config) error {
-		if opt.Dialer != nil {
-			err := bindIfaceToDialer(opt.Dialer, name)
-			if err == errPlatformNotSupport {
-				err = fallbackBindToDialer(opt.Dialer, opt.Address, opt.IP, name)
-			}
+	return func(opt *Config) {
+		opt.InterfaceName = name
+	}
+}
 
-			return err
-		}
-		if opt.ListenConfig != nil {
-			err := bindIfaceToListenConfig(opt.ListenConfig, name)
-			if err == errPlatformNotSupport {
-				opt.Address, err = fallbackBindToListenConfig(name)
-			}
-
-			return err
-		}
-
-		return nil
+func WithAddrReuse(reuse bool) Option {
+	return func(opt *Config) {
+		opt.AddrReuse = reuse
 	}
 }

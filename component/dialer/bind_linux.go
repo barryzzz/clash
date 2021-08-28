@@ -7,13 +7,19 @@ import (
 
 type controlFn = func(network, address string, c syscall.RawConn) error
 
-func bindControl(ifaceName string) controlFn {
-	return func(network, address string, c syscall.RawConn) error {
+func bindControl(ifaceName string, chain controlFn) controlFn {
+	return func(network, address string, c syscall.RawConn) (err error) {
+		defer func() {
+			if err == nil && chain != nil {
+				err = chain(network, address, c)
+			}
+		}()
+
 		ipStr, _, err := net.SplitHostPort(address)
 		if err == nil {
 			ip := net.ParseIP(ipStr)
 			if ip != nil && !ip.IsGlobalUnicast() {
-				return nil
+				return
 			}
 		}
 
@@ -23,14 +29,30 @@ func bindControl(ifaceName string) controlFn {
 	}
 }
 
-func bindIfaceToDialer(dialer *net.Dialer, ifaceName string) error {
-	dialer.Control = bindControl(ifaceName)
+func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, _, _ string, _ net.IP) error {
+	dialer.Control = bindControl(ifaceName, dialer.Control)
 
 	return nil
 }
 
-func bindIfaceToListenConfig(lc *net.ListenConfig, ifaceName string) error {
-	lc.Control = bindControl(ifaceName)
+func bindIfaceToListenConfig(ifaceName string, lc *net.ListenConfig, _, address string) (string, error) {
+	lc.Control = bindControl(ifaceName, lc.Control)
 
-	return nil
+	return address, nil
+}
+
+func addrReuseToListenConfig(lc *net.ListenConfig) {
+	chain := lc.Control
+
+	lc.Control = func(network, address string, c syscall.RawConn) (err error) {
+		defer func() {
+			if err == nil && chain != nil {
+				err = chain(network, address, c)
+			}
+		}()
+
+		return c.Control(func(fd uintptr) {
+			syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+		})
+	}
 }
