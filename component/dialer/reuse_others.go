@@ -7,6 +7,4 @@ import (
 	"net"
 )
 
-func addrReuseToListenConfig(*net.ListenConfig) {
-
-}
+func addrReuseToListenConfig(*net.ListenConfig) {}
