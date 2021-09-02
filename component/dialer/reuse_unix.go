@@ -6,6 +6,8 @@ package dialer
 import (
 	"net"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 func addrReuseToListenConfig(lc *net.ListenConfig) {
@@ -19,7 +21,8 @@ func addrReuseToListenConfig(lc *net.ListenConfig) {
 		}()
 
 		return c.Control(func(fd uintptr) {
-			syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+			unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1)
+			unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
 		})
 	}
 }

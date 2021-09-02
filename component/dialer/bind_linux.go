@@ -3,6 +3,8 @@ package dialer
 import (
 	"net"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 type controlFn = func(network, address string, c syscall.RawConn) error
@@ -24,7 +26,7 @@ func bindControl(ifaceName string, chain controlFn) controlFn {
 		}
 
 		return c.Control(func(fd uintptr) {
-			syscall.BindToDevice(int(fd), ifaceName)
+			unix.BindToDevice(int(fd), ifaceName)
 		})
 	}
 }

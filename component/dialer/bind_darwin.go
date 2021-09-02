@@ -4,6 +4,8 @@ import (
 	"net"
 	"syscall"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/Dreamacro/clash/component/iface"
 )
 
@@ -28,9 +30,9 @@ func bindControl(ifaceIdx int, chain controlFn) controlFn {
 		return c.Control(func(fd uintptr) {
 			switch network {
 			case "tcp4", "udp4":
-				syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_BOUND_IF, ifaceIdx)
+				unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, ifaceIdx)
 			case "tcp6", "udp6":
-				syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_BOUND_IF, ifaceIdx)
+				unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, ifaceIdx)
 			}
 		})
 	}
