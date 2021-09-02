@@ -21,14 +21,14 @@ func ResolveDNSFromDHCP(context context.Context, ifaceName string) ([]net.IP, er
 
 	result := make(chan []net.IP, 1)
 
-	inform, err := dhcpv4.NewDiscovery(randomHardware(), dhcpv4.WithBroadcast(true), dhcpv4.WithRequestedOptions(dhcpv4.OptionDomainNameServer))
+	discovery, err := dhcpv4.NewDiscovery(randomHardware(), dhcpv4.WithBroadcast(true), dhcpv4.WithRequestedOptions(dhcpv4.OptionDomainNameServer))
 	if err != nil {
 		return nil, err
 	}
 
-	go receiveAck(conn, inform.TransactionID, result)
+	go receiveOffer(conn, discovery.TransactionID, result)
 
-	_, err = conn.WriteTo(inform.ToBytes(), &net.UDPAddr{IP: net.IPv4bcast, Port: 67})
+	_, err = conn.WriteTo(discovery.ToBytes(), &net.UDPAddr{IP: net.IPv4bcast, Port: 67})
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func ResolveDNSFromDHCP(context context.Context, ifaceName string) ([]net.IP, er
 	}
 }
 
-func receiveAck(conn net.PacketConn, id dhcpv4.TransactionID, result chan<- []net.IP) {
+func receiveOffer(conn net.PacketConn, id dhcpv4.TransactionID, result chan<- []net.IP) {
 	defer close(result)
 
 	buf := make([]byte, dhcpv4.MaxMessageSize)
