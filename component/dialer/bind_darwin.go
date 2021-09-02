@@ -38,7 +38,7 @@ func bindControl(ifaceIdx int, chain controlFn) controlFn {
 	}
 }
 
-func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, _, _ string, _ net.IP) error {
+func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, _ string, _ net.IP) error {
 	ifaceObj, err := iface.ResolveInterface(ifaceName)
 	if err != nil {
 		return err

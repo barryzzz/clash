@@ -5,6 +5,7 @@ var (
 )
 
 type Config struct {
+	SkipDefault   bool
 	InterfaceName string
 	AddrReuse     bool
 }
@@ -20,5 +21,11 @@ func WithInterface(name string) Option {
 func WithAddrReuse(reuse bool) Option {
 	return func(opt *Config) {
 		opt.AddrReuse = reuse
+	}
+}
+
+func WithSkipDefault(skip bool) Option {
+	return func(opt *Config) {
+		opt.SkipDefault = skip
 	}
 }

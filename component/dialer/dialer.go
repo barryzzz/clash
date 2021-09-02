@@ -27,7 +27,7 @@ func DialContext(ctx context.Context, network, address string, options ...Option
 			return nil, err
 		}
 
-		return dialContext(ctx, network, net.JoinHostPort(ip.String(), port), ip, options)
+		return dialContext(ctx, network, ip, port, options)
 	case "tcp", "udp":
 		return dualStackDialContext(ctx, network, address, options)
 	default:
@@ -38,9 +38,12 @@ func DialContext(ctx context.Context, network, address string, options ...Option
 func ListenPacket(ctx context.Context, network, address string, options ...Option) (net.PacketConn, error) {
 	cfg := &Config{}
 
-	for _, o := range DefaultOptions {
-		o(cfg)
+	if !cfg.SkipDefault {
+		for _, o := range DefaultOptions {
+			o(cfg)
+		}
 	}
+
 	for _, o := range options {
 		o(cfg)
 	}
@@ -60,24 +63,27 @@ func ListenPacket(ctx context.Context, network, address string, options ...Optio
 	return lc.ListenPacket(ctx, network, address)
 }
 
-func dialContext(ctx context.Context, network, address string, destination net.IP, options []Option) (net.Conn, error) {
+func dialContext(ctx context.Context, network string, destination net.IP, port string, options []Option) (net.Conn, error) {
 	opt := &Config{}
 
-	for _, o := range DefaultOptions {
-		o(opt)
+	if !opt.SkipDefault {
+		for _, o := range DefaultOptions {
+			o(opt)
+		}
 	}
+
 	for _, o := range options {
 		o(opt)
 	}
 
 	dialer := &net.Dialer{}
 	if opt.InterfaceName != "" {
-		if err := bindIfaceToDialer(opt.InterfaceName, dialer, network, address, destination); err != nil {
+		if err := bindIfaceToDialer(opt.InterfaceName, dialer, network, destination); err != nil {
 			return nil, err
 		}
 	}
 
-	return dialer.DialContext(ctx, network, address)
+	return dialer.DialContext(ctx, network, net.JoinHostPort(destination.String(), port))
 }
 
 func dualStackDialContext(ctx context.Context, network, address string, options []Option) (net.Conn, error) {
@@ -122,7 +128,7 @@ func dualStackDialContext(ctx context.Context, network, address string, options 
 		}
 		result.resolved = true
 
-		result.Conn, result.error = dialContext(ctx, network, net.JoinHostPort(ip.String(), port), ip, options)
+		result.Conn, result.error = dialContext(ctx, network, ip, port, options)
 	}
 
 	go startRacer(ctx, network+"4", host, false)

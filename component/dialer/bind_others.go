@@ -6,92 +6,85 @@ package dialer
 import (
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/Dreamacro/clash/component/iface"
 )
 
-func lookupTCPAddr(ip net.IP, addrs []*net.IPNet, port string) (*net.TCPAddr, error) {
-	var addr *net.IPNet
-	var err error
-
-	if ip.To4() != nil {
-		addr, err = iface.PickIPv4Addr(addrs)
-	} else {
-		addr, err = iface.PickIPv6Addr(addrs)
-	}
+func lookupLocalAddr(ifaceName string, network string, destination net.IP, port int) (net.Addr, error) {
+	ifaceObj, err := iface.ResolveInterface(ifaceName)
 	if err != nil {
 		return nil, err
 	}
 
-	p, _ := strconv.Atoi(port)
-	return &net.TCPAddr{IP: addr.IP, Port: p}, nil
-}
-
-func lookupUDPAddr(ip net.IP, addrs []*net.IPNet, port string) (*net.UDPAddr, error) {
 	var addr *net.IPNet
-	var err error
-
-	if ip.To4() != nil {
-		addr, err = iface.PickIPv4Addr(addrs)
-	} else {
-		addr, err = iface.PickIPv6Addr(addrs)
+	switch network {
+	case "udp4", "tcp4":
+		addr, err = iface.PickIPv4Addr(ifaceObj.Addrs, destination)
+	case "tcp6", "udp6":
+		addr, err = iface.PickIPv6Addr(ifaceObj.Addrs, destination)
+	default:
+		if destination != nil {
+			if destination.To4() != nil {
+				addr, err = iface.PickIPv4Addr(ifaceObj.Addrs, destination)
+			} else {
+				addr, err = iface.PickIPv6Addr(ifaceObj.Addrs, destination)
+			}
+		} else {
+			addr, err = iface.PickIPv4Addr(ifaceObj.Addrs, destination)
+		}
 	}
-	if err != nil {
-		return nil, err
+
+	if strings.HasPrefix(network, "tcp") {
+		return &net.TCPAddr{
+			IP:   addr.IP,
+			Port: port,
+		}, nil
+	} else if strings.HasPrefix(network, "udp") {
+		return &net.UDPAddr{
+			IP:   addr.IP,
+			Port: port,
+		}, nil
 	}
 
-	p, _ := strconv.Atoi(port)
-	return &net.UDPAddr{IP: addr.IP, Port: p}, nil
+	return nil, iface.ErrAddrNotFound
 }
 
-func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, network, address string, destination net.IP) error {
+func bindIfaceToDialer(ifaceName string, dialer *net.Dialer, network string, destination net.IP) error {
 	if !destination.IsGlobalUnicast() {
 		return nil
 	}
 
-	ifaceObj, err := iface.ResolveInterface(ifaceName)
+	local := 0
+	if dialer.LocalAddr != nil {
+		_, port, err := net.SplitHostPort(dialer.LocalAddr.String())
+		if err == nil {
+			local, _ = strconv.Atoi(port)
+		}
+	}
+
+	addr, err := lookupLocalAddr(ifaceName, network, destination, local)
 	if err != nil {
 		return err
 	}
 
-	_, port, err := net.SplitHostPort(dialer.LocalAddr.String())
-	if err != nil {
-		port = "0"
-	}
-
-	switch network {
-	case "tcp", "tcp4", "tcp6":
-		if addr, err := lookupTCPAddr(destination, ifaceObj.Addrs, port); err == nil {
-			dialer.LocalAddr = addr
-		} else {
-			return err
-		}
-	case "udp", "udp4", "udp6":
-		if addr, err := lookupUDPAddr(destination, ifaceObj.Addrs, port); err == nil {
-			dialer.LocalAddr = addr
-		} else {
-			return err
-		}
-	}
+	dialer.LocalAddr = addr
 
 	return nil
 }
 
-func bindIfaceToListenConfig(ifaceName string, _ *net.ListenConfig, _, address string) (string, error) {
-	ifaceObj, err := iface.ResolveInterface(ifaceName)
-	if err != nil {
-		return "", err
-	}
-
-	addr, err := iface.PickIPv4Addr(ifaceObj.Addrs)
-	if err != nil {
-		return "", err
-	}
-
+func bindIfaceToListenConfig(ifaceName string, _ *net.ListenConfig, network, address string) (string, error) {
 	_, port, err := net.SplitHostPort(address)
 	if err != nil {
 		port = "0"
 	}
 
-	return net.JoinHostPort(addr.IP.String(), port), nil
+	local, _ := strconv.Atoi(port)
+
+	addr, err := lookupLocalAddr(ifaceName, network, nil, local)
+	if err != nil {
+		return "", err
+	}
+
+	return addr.String(), nil
 }

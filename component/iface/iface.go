@@ -68,9 +68,13 @@ func ResolveInterface(name string) (*Interface, error) {
 	return iface, nil
 }
 
-func PickIPv4Addr(addrs []*net.IPNet) (*net.IPNet, error) {
+func PickIPv4Addr(addrs []*net.IPNet, destination net.IP) (*net.IPNet, error) {
 	for _, addr := range addrs {
-		if addr.IP.To4() != nil {
+		if addr.IP.To4() == nil {
+			continue
+		}
+
+		if (destination == nil && !addr.IP.IsLinkLocalUnicast()) || (destination != nil && addr.Contains(destination)) {
 			return addr, nil
 		}
 	}
@@ -78,9 +82,13 @@ func PickIPv4Addr(addrs []*net.IPNet) (*net.IPNet, error) {
 	return nil, ErrAddrNotFound
 }
 
-func PickIPv6Addr(addrs []*net.IPNet) (*net.IPNet, error) {
+func PickIPv6Addr(addrs []*net.IPNet, destination net.IP) (*net.IPNet, error) {
 	for _, addr := range addrs {
-		if addr.IP.To4() == nil {
+		if addr.IP.To4() != nil {
+			continue
+		}
+
+		if (destination == nil && !addr.IP.IsLinkLocalUnicast()) || (destination != nil && addr.Contains(destination)) {
 			return addr, nil
 		}
 	}
