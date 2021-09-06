@@ -34,6 +34,9 @@ func lookupLocalAddr(ifaceName string, network string, destination net.IP, port 
 			addr, err = ifaceObj.PickIPv4Addr(destination)
 		}
 	}
+	if err != nil {
+		return nil, err
+	}
 
 	if strings.HasPrefix(network, "tcp") {
 		return &net.TCPAddr{
