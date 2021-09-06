@@ -9,8 +9,10 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 )
 
-var ErrNotResponding = errors.New("DHCP not responding")
-var ErrNotFound = errors.New("DNS option not found")
+var (
+	ErrNotResponding = errors.New("DHCP not responding")
+	ErrNotFound      = errors.New("DNS option not found")
+)
 
 func ResolveDNSFromDHCP(context context.Context, ifaceName string) ([]net.IP, error) {
 	conn, err := ListenDHCPClient(context, ifaceName)
