@@ -124,7 +124,7 @@ func (d *dhcpClient) invalidate() (bool, error) {
 		return false, err
 	}
 
-	addr, err := iface.PickIPv4Addr(ifaceObj.Addrs, nil)
+	addr, err := ifaceObj.PickIPv4Addr(nil)
 	if err != nil {
 		return false, err
 	}

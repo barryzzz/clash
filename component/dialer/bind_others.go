@@ -20,18 +20,18 @@ func lookupLocalAddr(ifaceName string, network string, destination net.IP, port 
 	var addr *net.IPNet
 	switch network {
 	case "udp4", "tcp4":
-		addr, err = iface.PickIPv4Addr(ifaceObj.Addrs, destination)
+		addr, err = ifaceObj.PickIPv4Addr(destination)
 	case "tcp6", "udp6":
-		addr, err = iface.PickIPv6Addr(ifaceObj.Addrs, destination)
+		addr, err = ifaceObj.PickIPv6Addr(destination)
 	default:
 		if destination != nil {
 			if destination.To4() != nil {
-				addr, err = iface.PickIPv4Addr(ifaceObj.Addrs, destination)
+				addr, err = ifaceObj.PickIPv4Addr(destination)
 			} else {
-				addr, err = iface.PickIPv6Addr(ifaceObj.Addrs, destination)
+				addr, err = ifaceObj.PickIPv6Addr(destination)
 			}
 		} else {
-			addr, err = iface.PickIPv4Addr(ifaceObj.Addrs, destination)
+			addr, err = ifaceObj.PickIPv4Addr(destination)
 		}
 	}
 

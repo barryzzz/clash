@@ -68,34 +68,46 @@ func ResolveInterface(name string) (*Interface, error) {
 	return iface, nil
 }
 
-func PickIPv4Addr(addrs []*net.IPNet, destination net.IP) (*net.IPNet, error) {
-	for _, addr := range addrs {
-		if addr.IP.To4() == nil {
-			continue
-		}
-
-		if (destination == nil && !addr.IP.IsLinkLocalUnicast()) || (destination != nil && addr.Contains(destination)) {
-			return addr, nil
-		}
-	}
-
-	return nil, ErrAddrNotFound
-}
-
-func PickIPv6Addr(addrs []*net.IPNet, destination net.IP) (*net.IPNet, error) {
-	for _, addr := range addrs {
-		if addr.IP.To4() != nil {
-			continue
-		}
-
-		if (destination == nil && !addr.IP.IsLinkLocalUnicast()) || (destination != nil && addr.Contains(destination)) {
-			return addr, nil
-		}
-	}
-
-	return nil, ErrAddrNotFound
-}
-
 func FlushCache() {
 	interfaces.Reset()
+}
+
+func (iface *Interface) PickIPv4Addr(destination net.IP) (*net.IPNet, error) {
+	return iface.pickIPAddr(destination, func(addr *net.IPNet) bool {
+		return addr.IP.To4() != nil
+	})
+}
+
+func (iface *Interface) PickIPv6Addr(destination net.IP) (*net.IPNet, error) {
+	return iface.pickIPAddr(destination, func(addr *net.IPNet) bool {
+		return addr.IP.To4() == nil
+	})
+}
+
+func (iface *Interface) pickIPAddr(destination net.IP, accept func(addr *net.IPNet) bool) (*net.IPNet, error) {
+	var fallback *net.IPNet
+
+	for _, addr := range iface.Addrs {
+		if !accept(addr) {
+			continue
+		}
+
+		if fallback == nil && !addr.IP.IsLinkLocalUnicast() {
+			fallback = addr
+
+			if destination == nil {
+				break
+			}
+		}
+
+		if destination != nil && addr.Contains(destination) {
+			return addr, nil
+		}
+	}
+
+	if fallback == nil {
+		return nil, ErrAddrNotFound
+	}
+
+	return fallback, nil
 }
