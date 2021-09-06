@@ -36,9 +36,9 @@ func DialContext(ctx context.Context, network, address string, options ...Option
 }
 
 func ListenPacket(ctx context.Context, network, address string, options ...Option) (net.PacketConn, error) {
-	cfg := &Config{}
+	cfg := &config{}
 
-	if !cfg.SkipDefault {
+	if !cfg.skipDefault {
 		for _, o := range DefaultOptions {
 			o(cfg)
 		}
@@ -49,14 +49,14 @@ func ListenPacket(ctx context.Context, network, address string, options ...Optio
 	}
 
 	lc := &net.ListenConfig{}
-	if cfg.InterfaceName != "" {
-		addr, err := bindIfaceToListenConfig(cfg.InterfaceName, lc, network, address)
+	if cfg.interfaceName != "" {
+		addr, err := bindIfaceToListenConfig(cfg.interfaceName, lc, network, address)
 		if err != nil {
 			return nil, err
 		}
 		address = addr
 	}
-	if cfg.AddrReuse {
+	if cfg.addrReuse {
 		addrReuseToListenConfig(lc)
 	}
 
@@ -64,9 +64,9 @@ func ListenPacket(ctx context.Context, network, address string, options ...Optio
 }
 
 func dialContext(ctx context.Context, network string, destination net.IP, port string, options []Option) (net.Conn, error) {
-	opt := &Config{}
+	opt := &config{}
 
-	if !opt.SkipDefault {
+	if !opt.skipDefault {
 		for _, o := range DefaultOptions {
 			o(opt)
 		}
@@ -77,8 +77,8 @@ func dialContext(ctx context.Context, network string, destination net.IP, port s
 	}
 
 	dialer := &net.Dialer{}
-	if opt.InterfaceName != "" {
-		if err := bindIfaceToDialer(opt.InterfaceName, dialer, network, destination); err != nil {
+	if opt.interfaceName != "" {
+		if err := bindIfaceToDialer(opt.interfaceName, dialer, network, destination); err != nil {
 			return nil, err
 		}
 	}

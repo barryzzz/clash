@@ -4,28 +4,28 @@ var (
 	DefaultOptions []Option
 )
 
-type Config struct {
-	SkipDefault   bool
-	InterfaceName string
-	AddrReuse     bool
+type config struct {
+	skipDefault   bool
+	interfaceName string
+	addrReuse     bool
 }
 
-type Option func(opt *Config)
+type Option func(opt *config)
 
 func WithInterface(name string) Option {
-	return func(opt *Config) {
-		opt.InterfaceName = name
+	return func(opt *config) {
+		opt.interfaceName = name
 	}
 }
 
 func WithAddrReuse(reuse bool) Option {
-	return func(opt *Config) {
-		opt.AddrReuse = reuse
+	return func(opt *config) {
+		opt.addrReuse = reuse
 	}
 }
 
 func WithSkipDefault(skip bool) Option {
-	return func(opt *Config) {
-		opt.SkipDefault = skip
+	return func(opt *config) {
+		opt.skipDefault = skip
 	}
 }
