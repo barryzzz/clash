@@ -24,8 +24,9 @@ func (c *client) Exchange(m *D.Msg) (msg *D.Msg, err error) {
 	return c.ExchangeContext(context.Background(), m)
 }
 
-func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*D.Msg, error) {
 	var ip net.IP
+	var err error
 	if c.r == nil {
 		// a default ip dns
 		ip = net.ParseIP(c.host)
@@ -58,7 +59,7 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err
 			conn = tls.Client(conn, c.Client.TLSConfig)
 		}
 
-		msg, _, err = c.Client.ExchangeWithConn(m, &D.Conn{
+		msg, _, err := c.Client.ExchangeWithConn(m, &D.Conn{
 			Conn:         conn,
 			UDPSize:      c.Client.UDPSize,
 			TsigSecret:   c.Client.TsigSecret,
